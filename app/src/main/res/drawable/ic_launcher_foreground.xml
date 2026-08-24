@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- leaf body -->
+    <path
+        android:fillColor="#C21E4F"
+        android:pathData="M54,26 C73,41 76,61 54,84 C32,61 35,41 54,26 Z" />
+
+    <!-- lamination veins -->
+    <path
+        android:strokeColor="#FCFBF9"
+        android:strokeWidth="2.2"
+        android:strokeLineCap="round"
+        android:pathData="M54,33 L54,78" />
+    <path
+        android:strokeColor="#FCFBF9"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:pathData="M54,50 L64,42 M54,60 L66,53 M54,70 L63,64 M54,50 L44,42 M54,60 L42,53 M54,70 L45,64" />
+</vector>

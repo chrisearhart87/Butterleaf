@@ -1,0 +1,55 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'app.butterleaf'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId "app.butterleaf"
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName "1.0"
+    }
+
+    signingConfigs {
+        shared {
+            storeFile file("../keystore/butterleaf.keystore")
+            storePassword "butterleaf"
+            keyAlias "butterleaf"
+            keyPassword "butterleaf"
+        }
+    }
+
+    buildTypes {
+        debug {
+            signingConfig signingConfigs.shared
+        }
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.shared
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    packagingOptions {
+        // Keep the bundled .otf fonts uncompressed-safe and untouched
+        resources {
+            excludes += ['META-INF/*']
+        }
+    }
+
+    androidResources {
+        noCompress 'otf'
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
+}
