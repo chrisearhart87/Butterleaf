@@ -428,6 +428,14 @@ html[data-theme='dark'] .seg button.on { background: var(--line); }
 .ed-row .unit-f { width: 96px; flex: none; }
 .ed-row .del { color: var(--muted); width: 34px; height: 46px; display: grid; place-items: center; flex: none; }
 .ed-row .del svg { width: 17px; height: 17px; }
+.ed-section { margin-top: 16px; }
+.ed-section .section-f {
+  font-family: var(--serif); font-style: italic; font-size: 16px;
+  color: var(--accent); background: var(--accent-wash);
+  border-color: transparent; padding: 11px 14px;
+}
+.ed-section .section-f::placeholder { color: color-mix(in srgb, var(--accent) 55%, transparent); font-style: italic; }
+
 .ed-step { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 10px; }
 .ed-step .n { font-family: var(--serif); font-size: 20px; color: var(--accent); width: 22px; padding-top: 11px; flex: none; }
 .add-line {
