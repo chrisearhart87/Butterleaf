@@ -48,6 +48,7 @@
 
   var draft = null;
   var isNew = false;
+  var lastIngRow = null;
 
   function openEditor(screen, existing, brandNew) {
     draft = JSON.parse(JSON.stringify(existing));
@@ -57,6 +58,7 @@
     draft.ingredients.forEach(function (i) { if (!i.raw && !i.section) i.raw = composeRaw(i); });
     draft.ingredients = withSectionRows(draft.ingredients);
 
+    lastIngRow = null;
     screen.innerHTML = editorHtml();
     wireEditor(screen);
 
@@ -172,27 +174,156 @@
 
   function ingRow(ing) {
     if (ing.section) return sectionRow(ing);
-    return '<div class="ed-row" data-ing-row="' + esc(ing.id) + '">' +
+    return '<div class="ed-row" data-ing-row="' + esc(ing.id) + '" data-kind="ing">' +
+      '<span class="grip" data-grip title="Drag to reorder">' + icon('grip') + '</span>' +
       '<input class="field" data-ing-input="' + esc(ing.id) + '" placeholder="200 g bread flour" value="' + esc(ing.raw || '') + '">' +
       '<button class="del" data-ing-del="' + esc(ing.id) + '">' + icon('x') + '</button>' +
       '</div>';
   }
 
   function sectionRow(sec) {
-    return '<div class="ed-row ed-section" data-ing-row="' + esc(sec.id) + '">' +
+    return '<div class="ed-row ed-section" data-ing-row="' + esc(sec.id) + '" data-kind="section">' +
+      '<span class="grip" data-grip title="Drag the whole section">' + icon('grip') + '</span>' +
       '<input class="field section-f" data-section-input="' + esc(sec.id) + '" ' +
         'placeholder="Section name — Filling, Topping…" value="' + esc(sec.name || '') + '">' +
       '<button class="del" data-ing-del="' + esc(sec.id) + '">' + icon('x') + '</button>' +
+      '<button class="del" data-add-here="' + esc(sec.id) + '" title="Add an ingredient to this section">' +
+        icon('plus') + '</button>' +
       '</div>';
   }
 
   function stepRow(step, i) {
-    return '<div class="ed-step" data-step-row="' + esc(step.id) + '">' +
-      '<div class="n">' + (i + 1) + '</div>' +
+    return '<div class="ed-step" data-step-row="' + esc(step.id) + '" data-kind="step">' +
+      '<div class="n" data-grip title="Drag to reorder">' + (i + 1) + '</div>' +
       '<textarea class="field" data-step-input="' + esc(step.id) + '" rows="2" ' +
         'placeholder="Describe this step">' + esc(step.text || '') + '</textarea>' +
       '<button class="del" data-step-del="' + esc(step.id) + '">' + icon('x') + '</button>' +
       '</div>';
+  }
+
+
+  /* ------------------------------------------------------ drag to reorder
+     Pointer-based rather than HTML5 drag-and-drop, which does not work on
+     touch. Dragging a section header carries its ingredients with it.      */
+
+  function makeDraggable(listEl, opts) {
+    opts = opts || {};
+    var dragging = null;
+
+    listEl.addEventListener('pointerdown', function (e) {
+      var grip = e.target.closest('[data-grip]');
+      if (!grip || !listEl.contains(grip)) return;
+      var row = grip.closest('[data-ing-row], [data-step-row]');
+      if (!row) return;
+
+      e.preventDefault();
+
+      // A section drags as a block: its header plus everything under it.
+      var block = [row];
+      if (row.getAttribute('data-kind') === 'section') {
+        var n = row.nextElementSibling;
+        while (n && n.getAttribute('data-kind') === 'ing') {
+          block.push(n);
+          n = n.nextElementSibling;
+        }
+      }
+
+      dragging = {
+        block: block,
+        startY: e.clientY,
+        height: block.reduce(function (h, el) { return h + el.getBoundingClientRect().height; }, 0),
+        moved: false
+      };
+
+      block.forEach(function (el) { el.classList.add('dragging'); });
+      try { grip.setPointerCapture(e.pointerId); } catch (err) {}
+      BL.native.vibrate(10);
+    });
+
+    listEl.addEventListener('pointermove', function (e) {
+      if (!dragging) return;
+      e.preventDefault();
+      var dy = e.clientY - dragging.startY;
+      if (Math.abs(dy) > 4) dragging.moved = true;
+      dragging.block.forEach(function (el) { el.style.transform = 'translateY(' + dy + 'px)'; });
+
+      var first = dragging.block[0];
+      var last = dragging.block[dragging.block.length - 1];
+
+      // moving up: swap with the row above once we pass its middle
+      var prev = first.previousElementSibling;
+      while (prev && prev.classList.contains('dragging')) prev = prev.previousElementSibling;
+      // if the row above belongs to a section, take that whole section
+      if (prev && prev.getAttribute('data-kind') === 'ing') {
+        var head = prev;
+        while (head && head.getAttribute('data-kind') === 'ing') {
+          var back = head.previousElementSibling;
+          if (back && back.getAttribute('data-kind') === 'section') { head = back; break; }
+          if (!back) break;
+          head = back;
+        }
+        if (head && head.getAttribute('data-kind') === 'section' &&
+            dragging.block[0].getAttribute('data-kind') === 'section') prev = head;
+      }
+      if (prev) {
+        var pr = prev.getBoundingClientRect();
+        if (e.clientY < pr.top + pr.height / 2) {
+          var prevBlock = blockOf(prev);
+          var above = prevBlock[0];
+          dragging.block.forEach(function (el) { listEl.insertBefore(el, above); });
+          dragging.startY -= prevBlock.reduce(function (h, el) {
+            return h + el.getBoundingClientRect().height;
+          }, 0);
+          dragging.block.forEach(function (el) {
+            el.style.transform = 'translateY(' + (e.clientY - dragging.startY) + 'px)';
+          });
+          if (opts.onMove) opts.onMove();
+          return;
+        }
+      }
+
+      // moving down
+      var next = last.nextElementSibling;
+      while (next && next.classList.contains('dragging')) next = next.nextElementSibling;
+      if (next) {
+        var nr = next.getBoundingClientRect();
+        if (e.clientY > nr.bottom - nr.height / 2) {
+          var nextBlock = blockOf(next);
+          var anchor = nextBlock[nextBlock.length - 1].nextSibling;
+          dragging.block.forEach(function (el) { listEl.insertBefore(el, anchor); });
+          dragging.startY += nextBlock.reduce(function (h, el) {
+            return h + el.getBoundingClientRect().height;
+          }, 0);
+          dragging.block.forEach(function (el) {
+            el.style.transform = 'translateY(' + (e.clientY - dragging.startY) + 'px)';
+          });
+          if (opts.onMove) opts.onMove();
+        }
+      }
+    });
+
+    function blockOf(row) {
+      var out = [row];
+      if (row.getAttribute('data-kind') === 'section') {
+        var n = row.nextElementSibling;
+        while (n && n.getAttribute('data-kind') === 'ing') { out.push(n); n = n.nextElementSibling; }
+      }
+      return out;
+    }
+
+    function end() {
+      if (!dragging) return;
+      dragging.block.forEach(function (el) {
+        el.classList.remove('dragging');
+        el.style.transform = '';
+      });
+      var moved = dragging.moved;
+      dragging = null;
+      if (moved && opts.onDrop) opts.onDrop();
+    }
+
+    listEl.addEventListener('pointerup', end);
+    listEl.addEventListener('pointercancel', end);
   }
 
   function renumber(screen) {
@@ -269,6 +400,11 @@
   function wireEditor(screen) {
     var photoInput = screen.querySelector('#photo-input');
 
+    var ingList = screen.querySelector('#ing-list');
+    if (ingList) makeDraggable(ingList);
+    var stepList = screen.querySelector('#step-list');
+    if (stepList) makeDraggable(stepList, { onDrop: function () { renumber(screen); } });
+
     screen.addEventListener('click', function (e) {
       var el;
 
@@ -312,11 +448,33 @@
         return;
       }
 
+      el = e.target.closest('[data-add-here]');
+      if (el) {
+        // drop a fresh row at the end of this section, not the end of the list
+        var secRow = el.closest('[data-ing-row]');
+        var after = secRow;
+        var scan = secRow.nextElementSibling;
+        while (scan && scan.getAttribute('data-kind') === 'ing') {
+          after = scan;
+          scan = scan.nextElementSibling;
+        }
+        after.insertAdjacentHTML('afterend', ingRow({ id: BL.uid(), raw: '' }));
+        var newRow = after.nextElementSibling.querySelector('input');
+        if (newRow) newRow.focus();
+        return;
+      }
+
       if (e.target.closest('[data-add-ing]')) {
         var ing = { id: BL.uid(), raw: '' };
         var list = screen.querySelector('#ing-list');
-        list.insertAdjacentHTML('beforeend', ingRow(ing));
-        var added = list.lastElementChild.querySelector('input');
+        // add next to whichever row you were last typing in, else at the end
+        var focusRow = lastIngRow && list.contains(lastIngRow) ? lastIngRow : null;
+        if (focusRow) {
+          focusRow.insertAdjacentHTML('afterend', ingRow(ing));
+        } else {
+          list.insertAdjacentHTML('beforeend', ingRow(ing));
+        }
+        var added = (focusRow ? focusRow.nextElementSibling : list.lastElementChild).querySelector('input');
         if (added) added.focus();
         return;
       }
@@ -381,6 +539,11 @@
         }
         img.src = dataUrl;
       });
+    });
+
+    screen.addEventListener('focusin', function (e) {
+      var row = e.target.closest('#ing-list [data-ing-row]');
+      if (row) lastIngRow = row;
     });
 
     screen.addEventListener('input', function (e) {

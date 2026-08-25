@@ -125,7 +125,16 @@
         html += '<div class="ing-group">' + esc(group) + '</div>';
       }
       var checked = state.checkedIng[idx] ? ' done' : '';
-      var d = U.display(ing.qty == null ? null : ing.qty * state.scale, ing.unit, ing.item, state.system);
+
+      // Nothing to scale or convert — show the line the way the recipe wrote it
+      if (ing.qty == null) {
+        html += '<button class="ing' + checked + '" data-ing="' + idx + '">' +
+          '<span class="box">' + icon('check') + '</span>' +
+          '<span class="txt">' + esc(ing.raw || ing.item) + '</span></button>';
+        return;
+      }
+
+      var d = U.display(ing.qty * state.scale, ing.unit, ing.item, state.system);
       var qtyText = d.qty ? (d.qty + (d.unit ? ' ' + d.unit : '')) : '';
       html += '<button class="ing' + checked + '" data-ing="' + idx + '">' +
         '<span class="box">' + icon('check') + '</span>' +

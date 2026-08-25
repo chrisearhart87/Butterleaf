@@ -297,6 +297,10 @@
       }
     }
 
+    // Everything after the note was split off — this is what the recipe
+    // actually says, and it is what we fall back to when there is no amount.
+    var asWritten = rest.trim();
+
     // unit word (allow "fl oz" two-worders)
     var two = rest.match(/^(fl\.?\s*oz\.?)\s+(.*)$/i);
     if (two) {
@@ -323,7 +327,15 @@
     }
 
     out.item = rest.trim() || raw;
-    if (out.qty != null && !out.unit) out.unit = 'each';
+
+    // No number anywhere? Then "pinch", "handful", "to taste" are part of the
+    // ingredient, not a measurement — keep the line exactly as written.
+    if (out.qty == null) {
+      out.unit = null;
+      out.item = asWritten || raw;
+    } else if (!out.unit) {
+      out.unit = 'each';
+    }
     return out;
   }
 
