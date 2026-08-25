@@ -426,8 +426,23 @@ html[data-theme='dark'] .seg button.on { background: var(--line); }
 .ed-row .field { padding: 12px 13px; font-size: 15px; }
 .ed-row .qty-f { width: 74px; flex: none; text-align: center; }
 .ed-row .unit-f { width: 96px; flex: none; }
-.ed-row .del { color: var(--muted); width: 34px; height: 46px; display: grid; place-items: center; flex: none; }
+.ed-row .del { color: var(--muted); width: 32px; height: 46px; display: grid; place-items: center; flex: none; }
+.ed-section .del[data-add-here] { color: var(--accent); }
 .ed-row .del svg { width: 17px; height: 17px; }
+.grip {
+  flex: none; width: 26px; height: 46px; display: grid; place-items: center;
+  color: var(--line); cursor: grab; touch-action: none; margin-left: -6px;
+}
+.grip svg { width: 18px; height: 18px; }
+.grip:active { cursor: grabbing; color: var(--muted); }
+.ed-row.dragging, .ed-step.dragging {
+  position: relative; z-index: 5; opacity: .92;
+  box-shadow: var(--shadow-md); border-radius: var(--r-md);
+}
+.ed-row.dragging .field, .ed-step.dragging .field { border-color: var(--accent); }
+.ed-step .n { touch-action: none; cursor: grab; }
+#ing-list, #step-list { position: relative; }
+
 .ed-section { margin-top: 16px; }
 .ed-section .section-f {
   font-family: var(--serif); font-style: italic; font-size: 16px;
