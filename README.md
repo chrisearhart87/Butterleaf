@@ -76,6 +76,18 @@ and your recipes stay put.
 **Favorites**
 - Tap the heart anywhere. The Favorites page lists them alphabetically, grouped by letter.
 
+**Sections**
+- Recipes that use the same ingredient in more than one part of the bake — flour in the
+  cake, the filling *and* the crumb topping — keep those parts apart. Import reads the
+  section headings off the page, and nothing gets merged together.
+- Add, rename or remove sections yourself with **Add section** in the editor.
+
+**Categories**
+- Make your own — no presets. Tap **Categories** in the library chip row, or Tools →
+  Categories.
+- A recipe can sit in as many as you like; assign them in the editor or from the recipe's
+  ⋯ menu. Tap a category to filter the library to it.
+
 **On the recipe page**
 - Scale to ½, 1, 1½, 2 or 3 batches — quantities re-render as proper fractions.
 - Flip the whole ingredient list between *as written*, *metric* and *US cups*, using a
@@ -90,6 +102,9 @@ and your recipes stay put.
 - Backed by real Android alarms (`setAlarmClock`), so they ring with sound, vibration and
   a full-screen alert even if the app is closed or the phone is asleep. Snooze 5 minutes
   or stop from the ringing screen.
+- Every running timer sits in the notification shade with a live countdown, so you can
+  check it from the lock screen without opening the app. Stop one straight from the
+  notification.
 - Survive a reboot. Quick-start presets for the usual bakery intervals.
 
 **Converter**
