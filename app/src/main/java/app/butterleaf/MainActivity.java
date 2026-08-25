@@ -482,13 +482,20 @@ public class MainActivity extends Activity {
         /** Mirrors the running timers into the notification shade. */
         @JavascriptInterface
         public void syncTimers(String timersJson) {
-            TimerService.sync(MainActivity.this, timersJson);
+            try {
+                TimerNotifications.sync(MainActivity.this, timersJson);
+            } catch (Throwable ignored) {
+            }
         }
 
         /** Ids of timers the user stopped from the notification, for JS to drop. */
         @JavascriptInterface
         public String takeCancelledTimers() {
-            return TimerService.takeCancelled(MainActivity.this);
+            try {
+                return TimerNotifications.takeCancelled(MainActivity.this);
+            } catch (Throwable t) {
+                return "[]";
+            }
         }
 
         @JavascriptInterface

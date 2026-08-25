@@ -18,6 +18,7 @@ public class AlarmReceiver extends BroadcastReceiver {
         if (label == null || label.trim().isEmpty()) label = "Bake timer";
 
         AlarmScheduler.forget(ctx, id);
+        TimerNotifications.clearOne(ctx, id);
         Notifs.ensureChannel(ctx);
 
         Intent ring = new Intent(ctx, AlarmActivity.class);
