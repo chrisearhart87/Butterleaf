@@ -3,4 +3,6 @@
     <string name="app_name">Butterleaf</string>
     <string name="alarm_channel_name">Bake timers</string>
     <string name="alarm_channel_desc">Rings when a bake timer finishes</string>
+    <string name="running_channel_name">Running timers</string>
+    <string name="running_channel_desc">Shows a live countdown while a timer runs</string>
 </resources>
