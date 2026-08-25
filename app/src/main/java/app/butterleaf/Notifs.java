@@ -13,6 +13,7 @@ import android.os.Vibrator;
 public class Notifs {
 
     public static final String CHANNEL_ALARM = "butterleaf_bake_timers";
+    public static final String CHANNEL_RUNNING = "butterleaf_running_timers";
     public static final long[] PATTERN = {0, 600, 400, 600, 400, 900};
 
     public static void ensureChannel(Context ctx) {
@@ -37,6 +38,24 @@ public class Notifs {
                 .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
                 .build();
         ch.setSound(alarm, attrs);
+        nm.createNotificationChannel(ch);
+    }
+
+    /** Silent channel for the live countdowns sitting in the shade. */
+    public static void ensureRunningChannel(Context ctx) {
+        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
+        if (nm == null) return;
+        if (nm.getNotificationChannel(CHANNEL_RUNNING) != null) return;
+
+        NotificationChannel ch = new NotificationChannel(
+                CHANNEL_RUNNING,
+                ctx.getString(R.string.running_channel_name),
+                NotificationManager.IMPORTANCE_LOW);
+        ch.setDescription(ctx.getString(R.string.running_channel_desc));
+        ch.enableVibration(false);
+        ch.setSound(null, null);
+        ch.setShowBadge(false);
+        ch.setLockscreenVisibility(android.app.Notification.VISIBILITY_PUBLIC);
         nm.createNotificationChannel(ch);
     }
 

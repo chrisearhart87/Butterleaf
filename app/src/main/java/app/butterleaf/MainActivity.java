@@ -59,6 +59,7 @@ public class MainActivity extends Activity {
     private ValueCallback<Uri[]> filePathCallback;
     private Uri cameraOutputUri;
     private String pendingSharedUrl;
+    private String pendingRoute;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
 
@@ -116,6 +117,10 @@ public class MainActivity extends Activity {
             public void onPageFinished(WebView view, String url) {
                 applyInsets();
                 js("window.__setTheme && window.__setTheme('" + (isNight() ? "dark" : "light") + "')");
+                if (pendingRoute != null) {
+                    js("window.__goRoute && window.__goRoute(" + jsStr(pendingRoute) + ")");
+                    pendingRoute = null;
+                }
                 if (pendingSharedUrl != null) {
                     js("window.__onSharedUrl && window.__onSharedUrl(" + jsStr(pendingSharedUrl) + ")");
                     pendingSharedUrl = null;
@@ -250,10 +255,24 @@ public class MainActivity extends Activity {
             js("window.__onSharedUrl && window.__onSharedUrl(" + jsStr(pendingSharedUrl) + ")");
             pendingSharedUrl = null;
         }
+        if (pendingRoute != null) {
+            js("window.__goRoute && window.__goRoute(" + jsStr(pendingRoute) + ")");
+            pendingRoute = null;
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        js("window.__syncFromNative && window.__syncFromNative()");
     }
 
     private void handleIntent(Intent intent) {
         if (intent == null) return;
+        String route = intent.getStringExtra("route");
+        if (route != null && !route.isEmpty()) {
+            pendingRoute = route;
+        }
         if (Intent.ACTION_SEND.equals(intent.getAction())) {
             String text = intent.getStringExtra(Intent.EXTRA_TEXT);
             if (text != null) {
@@ -458,6 +477,18 @@ public class MainActivity extends Activity {
                 }
                 js("window.__onImage && window.__onImage(" + jsStr(reqId) + "," + jsStr(dataUrl) + ")");
             });
+        }
+
+        /** Mirrors the running timers into the notification shade. */
+        @JavascriptInterface
+        public void syncTimers(String timersJson) {
+            TimerService.sync(MainActivity.this, timersJson);
+        }
+
+        /** Ids of timers the user stopped from the notification, for JS to drop. */
+        @JavascriptInterface
+        public String takeCancelledTimers() {
+            return TimerService.takeCancelled(MainActivity.this);
         }
 
         @JavascriptInterface
