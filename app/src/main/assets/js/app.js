@@ -114,6 +114,11 @@
       a.click();
     },
     importBackup: function () { if (N && N.importBackup) N.importBackup(); else BL.toast('File import needs the app'); },
+    syncTimers: function (list) { if (N && N.syncTimers) { try { N.syncTimers(JSON.stringify(list)); } catch (e) {} } },
+    takeCancelledTimers: function () {
+      if (!(N && N.takeCancelledTimers)) return [];
+      try { return JSON.parse(N.takeCancelledTimers() || '[]'); } catch (e) { return []; }
+    },
     exit: function () { if (N && N.exitApp) N.exitApp(); }
   };
   BL.native = native;
@@ -137,6 +142,12 @@
   window.__setTheme = function (mode) {
     BL.systemTheme = mode;
     BL.applyTheme();
+  };
+  window.__goRoute = function (hash) {
+    if (hash) BL.go(hash);
+  };
+  window.__syncFromNative = function () {
+    if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
   };
   window.__onSharedUrl = function (url) {
     BL.pendingSharedUrl = url;
@@ -244,6 +255,8 @@
   BL.stack = [];
   BL.go = function (hash, replace) {
     if (BL.sheetOpen) BL.closeSheet();
+    // Same route, new state (a category filter, say) — hashchange won't fire.
+    if (location.hash === hash) { BL.render(); return; }
     if (replace) location.replace(hash);
     else location.hash = hash;
   };
@@ -316,12 +329,86 @@
 
   function paintNav(active) {
     var map = { recipe: 'library', edit: 'library', 'new': 'library', import: 'library',
-      convert: 'tools', shopping: 'tools', bakers: 'tools', settings: 'tools', starter: 'tools' };
+      convert: 'tools', shopping: 'tools', bakers: 'tools', settings: 'tools', starter: 'tools',
+      categories: 'tools' };
     var key = map[active] || active;
     Array.prototype.forEach.call(document.querySelectorAll('#nav [data-nav]'), function (b) {
       b.classList.toggle('on', b.getAttribute('data-nav') === key);
     });
   }
+
+  /** Jumps to the library filtered to one category. */
+  BL.openCategory = function (id) {
+    BL.pendingCategory = id;
+    BL.go('#/library');
+  };
+
+  /** Checklist of categories for one recipe, with an inline "new" field. */
+  BL.categorySheet = function (recipe, onDone) {
+    function body() {
+      var cats = BL.store.categories().slice().sort(function (a, b) {
+        return a.name.localeCompare(b.name);
+      });
+      var picked = recipe.categories || [];
+      return '<h2 class="h1">Categories</h2>' +
+        '<p class="hint" style="margin:0 0 14px">' + BL.esc(recipe.title) + '</p>' +
+        (cats.length
+          ? cats.map(function (c) {
+              var on = picked.indexOf(c.id) !== -1;
+              return '<button class="ing' + (on ? ' done' : '') + '" data-pick="' + BL.esc(c.id) + '" ' +
+                'style="padding-left:0;padding-right:0">' +
+                '<span class="box">' + icon('check') + '</span>' +
+                '<span class="txt">' + BL.esc(c.name) + '</span></button>';
+            }).join('')
+          : '<p class="hint" style="margin:0 0 14px">No categories yet — make one below.</p>') +
+        '<div style="height:16px"></div>' +
+        '<div class="search">' + icon('plus') +
+          '<input id="cat-new" placeholder="New category" autocomplete="off"></div>' +
+        '<div style="height:14px"></div>' +
+        '<button class="btn btn-primary btn-block" data-cat-done>Done</button>';
+    }
+
+    function mount(sheet) {
+      var wrap = sheet.querySelector('.sheet-body');
+      wrap.addEventListener('click', function (e) {
+        var pick = e.target.closest('[data-pick]');
+        if (pick) {
+          var id = pick.getAttribute('data-pick');
+          var list = (recipe.categories || []).slice();
+          var at = list.indexOf(id);
+          if (at === -1) list.push(id); else list.splice(at, 1);
+          recipe.categories = list;
+          BL.store.setRecipeCategories(recipe.id, list);
+          pick.classList.toggle('done');
+          BL.native.vibrate(8);
+          return;
+        }
+        if (e.target.closest('[data-cat-done]')) {
+          BL.closeSheet();
+          if (onDone) onDone();
+        }
+      });
+      var input = wrap.querySelector('#cat-new');
+      input.addEventListener('keydown', function (e) {
+        if (e.key !== 'Enter') return;
+        var v = input.value.trim();
+        if (!v) return;
+        var cat = BL.store.addCategory(v);
+        if (cat) {
+          var list = (recipe.categories || []).slice();
+          if (list.indexOf(cat.id) === -1) list.push(cat.id);
+          recipe.categories = list;
+          BL.store.setRecipeCategories(recipe.id, list);
+        }
+        wrap.innerHTML = body();
+        mount(document.getElementById('sheet'));
+        var again = document.getElementById('cat-new');
+        if (again) again.focus();
+      });
+    }
+
+    BL.sheet(body(), mount);
+  };
 
   BL.addSheet = function () {
     BL.sheet(

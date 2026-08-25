@@ -6,11 +6,12 @@
 
   var icon = BL.icon, esc = BL.esc;
 
-  var ui = { q: '', tag: '', sort: 'recent' };
+  var ui = { q: '', tag: '', cat: '', sort: 'recent' };
 
   function searchBlob(r) {
     if (r._blob) return r._blob;
     var parts = [r.title || '', r.description || '', (r.tags || []).join(' '), r.sourceName || ''];
+    (r.categories || []).forEach(function (id) { parts.push(BL.store.categoryName(id)); });
     (r.ingredients || []).forEach(function (i) { parts.push(i.item || '', i.raw || ''); });
     r._blob = parts.join(' ').toLowerCase();
     return r._blob;
@@ -81,10 +82,13 @@
   /* ------------------------------------------------------- library */
 
   BL.route('library', function (screen) {
+    if (BL.pendingCategory) { ui.cat = BL.pendingCategory; ui.q = ''; BL.pendingCategory = null; }
     var all = BL.store.all();
     var tags = allTags();
 
+    var cats = BL.store.categories();
     var list = all.filter(function (r) {
+      if (ui.cat && (r.categories || []).indexOf(ui.cat) === -1) return false;
       if (ui.tag && (r.tags || []).map(function (t) { return t.toLowerCase(); }).indexOf(ui.tag.toLowerCase()) === -1) return false;
       return matches(r, ui.q);
     });
@@ -107,18 +111,32 @@
         '</div>' +
       '</div>';
 
-    if (tags.length) {
+    if (cats.length) {
+      html += '<div class="chips" style="margin-top:14px">' +
+        '<button class="chip' + (!ui.cat ? ' on' : '') + '" data-cat="">All</button>' +
+        cats.map(function (c) {
+          return '<button class="chip' + (ui.cat === c.id ? ' on' : '') +
+            '" data-cat="' + esc(c.id) + '">' + esc(c.name) + '</button>';
+        }).join('') +
+        '<button class="chip" data-manage-cats>' + icon('plus') + 'Categories</button>' +
+        '</div>';
+    } else if (tags.length) {
       html += '<div class="chips" style="margin-top:14px">' +
         '<button class="chip' + (!ui.tag ? ' on' : '') + '" data-tag="">All</button>' +
         tags.map(function (t) {
           return '<button class="chip' + (ui.tag.toLowerCase() === t.toLowerCase() ? ' on' : '') +
             '" data-tag="' + esc(t) + '">' + esc(t) + '</button>';
-        }).join('') + '</div>';
+        }).join('') +
+        '<button class="chip" data-manage-cats>' + icon('plus') + 'Categories</button>' +
+        '</div>';
     }
 
     if (all.length) {
       html += '<div class="meta" style="padding:14px 20px 12px">' +
-        (ui.q || ui.tag ? list.length + ' match' + (list.length === 1 ? '' : 'es') : 'Sorted by ' + sortLabel.toLowerCase()) +
+        (ui.q || ui.tag || ui.cat
+          ? list.length + ' match' + (list.length === 1 ? '' : 'es') +
+            (ui.cat ? ' in ' + esc(BL.store.categoryName(ui.cat)) : '')
+          : 'Sorted by ' + sortLabel.toLowerCase()) +
         '</div>';
     } else {
       html += '<div style="height:10px"></div>';
@@ -155,8 +173,11 @@
     screen.addEventListener('click', function (e) {
       var sort = e.target.closest('[data-sort]');
       if (sort) { sortSheet(); return; }
+      if (e.target.closest('[data-manage-cats]')) { BL.go('#/categories'); return; }
       var clear = e.target.closest('[data-clear], [data-clear-all]');
-      if (clear) { ui.q = ''; ui.tag = ''; BL.render(); return; }
+      if (clear) { ui.q = ''; ui.tag = ''; ui.cat = ''; BL.render(); return; }
+      var cat = e.target.closest('[data-cat]');
+      if (cat) { ui.cat = cat.getAttribute('data-cat'); BL.render(); return; }
       var tag = e.target.closest('[data-tag]');
       if (tag) { ui.tag = tag.getAttribute('data-tag'); BL.render(); return; }
       handleCardClick(e);

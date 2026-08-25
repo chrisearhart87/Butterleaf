@@ -26,7 +26,25 @@
     { m: 240, label: 'Bulk ferment' }
   ];
 
-  function save() { BL.store.saveTimers(timers); }
+  function save() {
+    BL.store.saveTimers(timers);
+    pushToShade();
+  }
+
+  /** Hands the live timers to Android so they show in the notification shade. */
+  function pushToShade() {
+    var live = timers.filter(function (t) { return t.state === 'running' || t.state === 'paused'; })
+      .map(function (t) {
+        return {
+          id: t.id,
+          label: t.label || 'Bake timer',
+          endAt: t.state === 'paused' ? Date.now() + (t.leftSec || 0) * 1000 : t.endAt,
+          leftSec: remaining(t),
+          paused: t.state === 'paused'
+        };
+      });
+    BL.native.syncTimers(live);
+  }
 
   function remaining(t) {
     if (t.state === 'paused') return Math.max(0, Math.round(t.leftSec));
@@ -63,7 +81,7 @@
   }
 
   function onFinish(t) {
-    save();
+    save();   // a finished timer drops out of the shade; the alarm takes over
     BL.native.vibrate(600);
     chime();
     BL.toast('⏱ ' + (t.label || 'Timer') + ' — time\'s up');
@@ -111,19 +129,33 @@
       if (timers.some(function (t) { return t.state === 'running'; })) ensureTick();
 
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) {
-          timers.forEach(function (t) {
-            if (t.state === 'running' && remaining(t) <= 0 && t.state !== 'done') {
-              t.state = 'done'; t.doneAt = t.endAt;
-            }
-          });
-          save();
-          if (location.hash === '#/timers') BL.render();
-        }
+        if (!document.hidden) api.reconcile();
       });
     },
 
     list: function () { return timers; },
+
+    /** Picks up anything stopped from the notification shade. */
+    reconcile: function () {
+      var cancelled = BL.native.takeCancelledTimers();
+      var changed = false;
+      if (cancelled && cancelled.length) {
+        timers = timers.filter(function (t) { return cancelled.indexOf(t.id) === -1; });
+        changed = true;
+      }
+      timers.forEach(function (t) {
+        if (t.state === 'running' && remaining(t) <= 0) {
+          t.state = 'done';
+          t.doneAt = t.endAt;
+          changed = true;
+        }
+      });
+      if (changed) {
+        save();
+        if (location.hash === '#/timers') BL.render();
+      }
+      return changed;
+    },
 
     start: function (minutes, label) {
       var sec = Math.round(minutes * 60);

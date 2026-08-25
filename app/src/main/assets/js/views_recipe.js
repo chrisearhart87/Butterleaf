@@ -54,6 +54,15 @@
       '<h1 class="display">' + esc(r.title) + '</h1></div>';
     html += '</div>';
 
+    var catLine = categoryLine(r);
+    if (catLine) {
+      html += '<div class="chips" style="padding-top:16px">' +
+        (r.categories || []).map(function (id) {
+          var name = BL.store.categoryName(id);
+          return name ? '<button class="chip accent" data-open-cat="' + esc(id) + '">' + esc(name) + '</button>' : '';
+        }).join('') + '</div>';
+    }
+
     if (r.description) {
       html += '<p class="body" style="padding:18px 20px 0;margin:0">' + esc(r.description) + '</p>';
     }
@@ -84,6 +93,11 @@
 
     html += '</div>';
     return html;
+  }
+
+  function categoryLine(r) {
+    return (r.categories || []).map(function (id) { return BL.store.categoryName(id); })
+      .filter(Boolean).join(' · ');
   }
 
   function stat(v, k) {
@@ -188,6 +202,9 @@
       }
 
       if (e.target.closest('[data-menu]')) { menu(r); return; }
+
+      el = e.target.closest('[data-open-cat]');
+      if (el) { BL.openCategory(el.getAttribute('data-open-cat')); return; }
       if (e.target.closest('[data-edit]')) { BL.go('#/edit/' + r.id); return; }
       if (e.target.closest('[data-source]')) { openSource(r); return; }
 
@@ -271,6 +288,9 @@
         '<span class="grow"><div class="tt">Edit recipe</div></span></button>' +
       '<button class="tile" data-m="dup"><span class="ti">' + icon('book') + '</span>' +
         '<span class="grow"><div class="tt">Duplicate</div><div class="ts">Make a variation without losing the original</div></span></button>' +
+      '<button class="tile" data-m="cats"><span class="ti">' + icon('list') + '</span>' +
+        '<span class="grow"><div class="tt">Categories</div>' +
+        '<div class="ts">' + (categoryLine(r) || 'Not in any category yet') + '</div></span></button>' +
       '<button class="tile" data-m="list"><span class="ti">' + icon('cart') + '</span>' +
         '<span class="grow"><div class="tt">Add to shopping list</div></span></button>' +
       '<button class="tile" data-m="del"><span class="ti" style="background:var(--accent-wash)">' + icon('trash') + '</span>' +
@@ -282,6 +302,9 @@
           var m = b.getAttribute('data-m');
           BL.closeSheet();
           if (m === 'edit') BL.go('#/edit/' + r.id);
+          if (m === 'cats') {
+            setTimeout(function () { BL.categorySheet(r, function () { BL.render(); }); }, 260);
+          }
           if (m === 'list') addAllToList(r);
           if (m === 'dup') {
             var copy = JSON.parse(JSON.stringify(r));

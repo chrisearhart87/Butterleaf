@@ -39,7 +39,7 @@
   function blank() {
     return {
       id: BL.uid(), title: '', description: '', image: '', yield: '',
-      prepMin: null, cookMin: null, totalMin: null, tags: [],
+      prepMin: null, cookMin: null, totalMin: null, tags: [], categories: [],
       ingredients: [{ id: BL.uid(), raw: '' }],
       steps: [{ id: BL.uid(), text: '' }],
       notes: '', favorite: false, sourceUrl: '', sourceName: ''
@@ -54,7 +54,8 @@
     isNew = !!brandNew;
     if (!draft.ingredients || !draft.ingredients.length) draft.ingredients = [{ id: BL.uid(), raw: '' }];
     if (!draft.steps || !draft.steps.length) draft.steps = [{ id: BL.uid(), text: '' }];
-    draft.ingredients.forEach(function (i) { if (!i.raw) i.raw = composeRaw(i); });
+    draft.ingredients.forEach(function (i) { if (!i.raw && !i.section) i.raw = composeRaw(i); });
+    draft.ingredients = withSectionRows(draft.ingredients);
 
     screen.innerHTML = editorHtml();
     wireEditor(screen);
@@ -112,12 +113,17 @@
 
         '<div class="field-row"><label class="label">Tags</label>' +
           '<input class="field" id="f-tags" placeholder="Bread, Weekend" value="' + esc((d.tags || []).join(', ')) + '"></div>' +
+
+        '<div class="field-row"><label class="label">Categories</label>' +
+          '<div id="cat-chips" class="chips" style="padding:0;flex-wrap:wrap">' + catChips() + '</div></div>' +
       '</div>' +
 
       '<div class="section-head"><h2 class="h2">Ingredients</h2>' +
         '<button class="link" data-paste-ing>Paste a list</button></div>' +
       '<div class="pad" id="ing-list">' + draft.ingredients.map(ingRow).join('') + '</div>' +
-      '<div class="pad"><button class="add-line" data-add-ing>' + icon('plus') + 'Add ingredient</button></div>' +
+      '<div class="pad" style="display:flex;gap:18px">' +
+        '<button class="add-line" data-add-ing>' + icon('plus') + 'Add ingredient</button>' +
+        '<button class="add-line" data-add-section>' + icon('list') + 'Add section</button></div>' +
 
       '<div class="section-head"><h2 class="h2">Method</h2>' +
         '<button class="link" data-paste-steps>Paste steps</button></div>' +
@@ -135,10 +141,48 @@
       '</div>';
   }
 
-  function ingRow(ing, i) {
+  /** Inserts a visible heading row wherever the stored group changes. */
+  function withSectionRows(list) {
+    var out = [];
+    var current = '';
+    list.forEach(function (i) {
+      if (i.section) { current = i.name || ''; out.push(i); return; }
+      var g = i.group || '';
+      if (g !== current) {
+        current = g;
+        if (g) out.push({ id: BL.uid(), section: true, name: g });
+      }
+      out.push(i);
+    });
+    return out;
+  }
+
+  function catChips() {
+    var cats = BL.store.categories().slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    });
+    var picked = draft.categories || [];
+    return cats.map(function (c) {
+      var on = picked.indexOf(c.id) !== -1;
+      return '<button type="button" class="chip' + (on ? ' on' : '') + '" data-cat-toggle="' + esc(c.id) + '">' +
+        esc(c.name) + '</button>';
+    }).join('') +
+      '<button type="button" class="chip" data-cat-add>' + icon('plus') + 'New</button>';
+  }
+
+  function ingRow(ing) {
+    if (ing.section) return sectionRow(ing);
     return '<div class="ed-row" data-ing-row="' + esc(ing.id) + '">' +
       '<input class="field" data-ing-input="' + esc(ing.id) + '" placeholder="200 g bread flour" value="' + esc(ing.raw || '') + '">' +
       '<button class="del" data-ing-del="' + esc(ing.id) + '">' + icon('x') + '</button>' +
+      '</div>';
+  }
+
+  function sectionRow(sec) {
+    return '<div class="ed-row ed-section" data-ing-row="' + esc(sec.id) + '">' +
+      '<input class="field section-f" data-section-input="' + esc(sec.id) + '" ' +
+        'placeholder="Section name — Filling, Topping…" value="' + esc(sec.name || '') + '">' +
+      '<button class="del" data-ing-del="' + esc(sec.id) + '">' + icon('x') + '</button>' +
       '</div>';
   }
 
@@ -169,12 +213,17 @@
     draft.tags = g('f-tags').split(',').map(function (t) { return t.trim(); }).filter(Boolean);
 
     var ings = [];
-    Array.prototype.forEach.call(screen.querySelectorAll('[data-ing-input]'), function (el) {
+    var group = '';
+    Array.prototype.forEach.call(screen.querySelectorAll('#ing-list [data-ing-row]'), function (row) {
+      var sec = row.querySelector('[data-section-input]');
+      if (sec) { group = sec.value.trim(); return; }
+      var el = row.querySelector('[data-ing-input]');
+      if (!el) return;
       var raw = el.value.trim();
       if (!raw) return;
       var p = U.parseIngredient(raw);
       ings.push({ id: el.getAttribute('data-ing-input'), raw: raw, qty: p.qty, qtyMax: p.qtyMax,
-        unit: p.unit, item: p.item, note: p.note, group: '' });
+        unit: p.unit, item: p.item, note: p.note, group: group });
     });
     draft.ingredients = ings;
 
@@ -194,6 +243,27 @@
       BL.viewBack = null;
       BL.back();
     });
+  }
+
+  function newCategorySheet(screen) {
+    BL.sheet('<h2 class="h1">New category</h2>' +
+      '<input class="field" id="cat-name" placeholder="Breads, Holiday, Weeknight…">' +
+      '<div style="height:14px"></div>' +
+      '<button class="btn btn-primary btn-block" data-make-cat>Create</button>',
+      function (s) {
+        var box = s.querySelector('#cat-name');
+        setTimeout(function () { box.focus(); }, 250);
+        s.querySelector('[data-make-cat]').onclick = function () {
+          var cat = BL.store.addCategory(box.value);
+          BL.closeSheet();
+          if (!cat) return;
+          var picked = (draft.categories || []).slice();
+          if (picked.indexOf(cat.id) === -1) picked.push(cat.id);
+          draft.categories = picked;
+          var wrap = screen.querySelector('#cat-chips');
+          if (wrap) wrap.innerHTML = catChips();
+        };
+      });
   }
 
   function wireEditor(screen) {
@@ -216,6 +286,31 @@
       }
 
       if (e.target.closest('[data-photo]')) { photoInput.click(); return; }
+
+      el = e.target.closest('[data-cat-toggle]');
+      if (el) {
+        var cid = el.getAttribute('data-cat-toggle');
+        var picked = (draft.categories || []).slice();
+        var at = picked.indexOf(cid);
+        if (at === -1) picked.push(cid); else picked.splice(at, 1);
+        draft.categories = picked;
+        el.classList.toggle('on');
+        return;
+      }
+
+      if (e.target.closest('[data-cat-add]')) {
+        newCategorySheet(screen);
+        return;
+      }
+
+      if (e.target.closest('[data-add-section]')) {
+        var sec = { id: BL.uid(), section: true, name: '' };
+        var slist2 = screen.querySelector('#ing-list');
+        slist2.insertAdjacentHTML('beforeend', sectionRow(sec));
+        var secInput = slist2.lastElementChild.querySelector('input');
+        if (secInput) secInput.focus();
+        return;
+      }
 
       if (e.target.closest('[data-add-ing]')) {
         var ing = { id: BL.uid(), raw: '' };
@@ -332,7 +427,12 @@
             var firstInput = list.querySelector('input');
             if (firstInput && !firstInput.value.trim()) firstInput.closest('[data-ing-row]').remove();
             lines.forEach(function (l) {
-              list.insertAdjacentHTML('beforeend', ingRow({ id: BL.uid(), raw: l }));
+              if (BL.parse.looksLikeHeading(l)) {
+                list.insertAdjacentHTML('beforeend',
+                  sectionRow({ id: BL.uid(), section: true, name: BL.parse.tidyHeading(l) }));
+              } else {
+                list.insertAdjacentHTML('beforeend', ingRow({ id: BL.uid(), raw: l }));
+              }
             });
           } else {
             var slist = screen.querySelector('#step-list');
@@ -496,10 +596,12 @@
     d.tags = p.tags || [];
     d.sourceUrl = p.sourceUrl;
     d.sourceName = p.sourceName;
-    d.ingredients = p.ingredientLines.map(function (line) {
+    d.ingredients = p.ingredientLines.map(function (entry) {
+      var line = typeof entry === 'string' ? entry : entry.text;
+      var group = typeof entry === 'string' ? '' : (entry.group || '');
       var parsed = U.parseIngredient(line);
       return { id: BL.uid(), raw: line, qty: parsed.qty, qtyMax: parsed.qtyMax,
-        unit: parsed.unit, item: parsed.item, note: parsed.note, group: '' };
+        unit: parsed.unit, item: parsed.item, note: parsed.note, group: group };
     });
     d.steps = p.steps.map(function (s) {
       return { id: BL.uid(), text: s.text, group: s.group || '', minutes: BL.parse.stepMinutes(s.text) };
@@ -563,6 +665,7 @@
     var d = blank();
     var ing = [], steps = [];
     var mode = 'ing';
+    var group = '';
     var titleFound = false;
 
     lines.forEach(function (line) {
@@ -582,16 +685,17 @@
       if (mode === 'ing') {
         // a long sentence in the ingredients block is probably a step
         if (clean.length > 140 && /\.\s|\.$/.test(clean)) { steps.push(clean); mode = 'steps'; }
-        else ing.push(clean);
+        else if (BL.parse.looksLikeHeading(clean)) group = BL.parse.tidyHeading(clean);
+        else ing.push({ text: clean, group: group });
       } else {
         steps.push(clean);
       }
     });
 
-    d.ingredients = ing.map(function (line) {
-      var p = U.parseIngredient(line);
-      return { id: BL.uid(), raw: line, qty: p.qty, qtyMax: p.qtyMax, unit: p.unit,
-        item: p.item, note: p.note, group: '' };
+    d.ingredients = ing.map(function (entry) {
+      var p = U.parseIngredient(entry.text);
+      return { id: BL.uid(), raw: entry.text, qty: p.qty, qtyMax: p.qtyMax, unit: p.unit,
+        item: p.item, note: p.note, group: entry.group || '' };
     });
     d.steps = steps.map(function (t) {
       return { id: BL.uid(), text: t, minutes: BL.parse.stepMinutes(t) };

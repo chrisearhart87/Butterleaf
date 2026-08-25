@@ -56,7 +56,7 @@
   function loadKv() {
     return new Promise(function (resolve) {
       var s = tx('kv', 'readonly');
-      var keys = ['settings', 'shopping', 'timers', 'seeded'];
+      var keys = ['settings', 'shopping', 'timers', 'seeded', 'categories'];
       var left = keys.length;
       keys.forEach(function (k) {
         var r = s.get(k);
@@ -68,6 +68,12 @@
 
   function notify() { listeners.forEach(function (f) { try { f(); } catch (e) {} }); }
 
+  function saveCategories(list) {
+    kv.categories = list;
+    try { tx('kv', 'readwrite').put(list, 'categories'); } catch (e) {}
+    notify();
+  }
+
   var api = {
     init: function () {
       return open().then(loadAll).then(loadKv).then(function () {
@@ -75,6 +81,7 @@
         else kv.settings = Object.assign({}, DEFAULT_SETTINGS, kv.settings);
         if (!kv.shopping) kv.shopping = [];
         if (!kv.timers) kv.timers = [];
+        if (!kv.categories) kv.categories = [];
       });
     },
 
@@ -116,6 +123,62 @@
       return kv.settings;
     },
 
+    /* --------------------------------------------------- categories */
+
+    categories: function () { return kv.categories || []; },
+
+    categoryName: function (id) {
+      var all = kv.categories || [];
+      for (var i = 0; i < all.length; i++) if (all[i].id === id) return all[i].name;
+      return '';
+    },
+
+    addCategory: function (name) {
+      name = String(name || '').trim();
+      if (!name) return null;
+      var all = (kv.categories || []).slice();
+      var existing = all.filter(function (c) {
+        return c.name.toLowerCase() === name.toLowerCase();
+      })[0];
+      if (existing) return existing;
+      var cat = { id: 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), name: name };
+      all.push(cat);
+      saveCategories(all);
+      return cat;
+    },
+
+    renameCategory: function (id, name) {
+      name = String(name || '').trim();
+      if (!name) return;
+      var all = (kv.categories || []).map(function (c) {
+        return c.id === id ? { id: c.id, name: name } : c;
+      });
+      saveCategories(all);
+    },
+
+    removeCategory: function (id) {
+      saveCategories((kv.categories || []).filter(function (c) { return c.id !== id; }));
+      api.all().forEach(function (r) {
+        if (r.categories && r.categories.indexOf(id) !== -1) {
+          r.categories = r.categories.filter(function (x) { return x !== id; });
+          api.put(r);
+        }
+      });
+    },
+
+    countIn: function (id) {
+      return api.all().filter(function (r) {
+        return (r.categories || []).indexOf(id) !== -1;
+      }).length;
+    },
+
+    setRecipeCategories: function (recipeId, ids) {
+      var r = recipesById[recipeId];
+      if (!r) return;
+      r.categories = ids.slice();
+      api.put(r);
+    },
+
     shopping: function () { return kv.shopping || []; },
 
     saveShopping: function (list) {
@@ -147,6 +210,7 @@
         exportedAt: new Date().toISOString(),
         recipes: api.all(),
         shopping: api.shopping(),
+        categories: api.categories(),
         settings: api.settings()
       });
     },
@@ -165,6 +229,15 @@
         try { tx('recipes', 'readwrite').put(r); } catch (e) {}
       });
       if (data.shopping && mode === 'replace') api.saveShopping(data.shopping);
+      if (data.categories && data.categories.length) {
+        var have = {};
+        (kv.categories || []).forEach(function (c) { have[c.name.toLowerCase()] = true; });
+        var merged = (kv.categories || []).slice();
+        data.categories.forEach(function (c) {
+          if (c && c.id && c.name && !have[c.name.toLowerCase()]) merged.push(c);
+        });
+        saveCategories(merged);
+      }
       notify();
       return { added: added, updated: updated };
     }

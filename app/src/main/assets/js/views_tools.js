@@ -11,6 +11,7 @@
 
   BL.route('tools', function (screen) {
     var listCount = BL.store.shopping().filter(function (i) { return !i.checked; }).length;
+    var catCount = BL.store.categories().length;
     screen.innerHTML = '<div class="view">' +
       '<div class="topbar"><div>' +
         '<div class="kicker" style="margin-bottom:6px">Butterleaf</div>' +
@@ -19,6 +20,7 @@
       '<div class="pad">' +
         tile('convert', 'scale', 'Baking converter', 'Cups to grams, ounces to millilitres, oven temperatures, pan sizes') +
         tile('shopping', 'cart', 'Shopping list', listCount ? listCount + ' things still to buy' : 'Build a list from any recipe') +
+        tile('categories', 'list', 'Categories', catCount ? catCount + (catCount === 1 ? ' category' : ' categories') : 'Group your recipes however you like') +
         tile('bakers', 'percent', "Baker's percentages", 'Hydration, salt and starter maths for bread') +
         tile('settings', 'tools', 'Settings & backup', 'Theme, default units, export your recipe box') +
       '</div>' +
@@ -652,6 +654,97 @@
       '</tbody></table>' +
       '<p class="hint" style="margin-top:14px">Warmer kitchen, bigger ratio: 1:5:5 at 24°C peaks in about 6–8 hours, ' +
       '1:1:1 in 3–4. Use it when it has domed and just started to flatten.</p>';
+  }
+
+  /* ---------------------------------------------------- categories */
+
+  BL.route('categories', function (screen) {
+    var cats = BL.store.categories().slice().sort(function (a, b) {
+      return a.name.localeCompare(b.name);
+    });
+
+    var html = '<div class="view">' +
+      header('Categories', cats.length ? cats.length + (cats.length === 1 ? ' category' : ' categories') : 'Your own shelves') +
+      '<div class="pad" style="padding-top:6px">' +
+        '<div class="search">' + icon('plus') +
+          '<input id="new-cat" placeholder="New category name" autocomplete="off">' +
+        '</div></div>';
+
+    if (!cats.length) {
+      html += '<div class="empty"><div class="mark">' + icon('list') + '</div>' +
+        '<h3>No categories yet</h3>' +
+        '<p>Type a name above to make your first one. A recipe can sit in as many categories as you like.</p></div>';
+    } else {
+      html += '<div style="height:18px"></div>';
+      cats.forEach(function (c) {
+        var n = BL.store.countIn(c.id);
+        html += '<div class="row" data-cat-row="' + esc(c.id) + '">' +
+          '<button class="grow" data-open-cat="' + esc(c.id) + '" style="text-align:left;background:none">' +
+            '<div class="rt" style="font-family:var(--serif);font-size:17px">' + esc(c.name) + '</div>' +
+            '<div class="rs">' + (n ? n + (n === 1 ? ' recipe' : ' recipes') : 'Empty') + '</div>' +
+          '</button>' +
+          '<button class="icon-btn ghost" data-rename-cat="' + esc(c.id) + '">' + icon('edit') + '</button>' +
+          '<button class="icon-btn ghost" data-del-cat="' + esc(c.id) + '">' + icon('trash') + '</button>' +
+          '</div>';
+      });
+    }
+
+    html += '<p class="hint" style="padding:24px 20px 30px">Deleting a category leaves every recipe in it untouched — ' +
+      'it just stops being filed there.</p></div>';
+    screen.innerHTML = html;
+
+    var input = screen.querySelector('#new-cat');
+    input.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter') return;
+      var v = input.value.trim();
+      if (!v) return;
+      BL.store.addCategory(v);
+      BL.toast('Added ' + v);
+      BL.render();
+      var again = document.getElementById('new-cat');
+      if (again) again.focus();
+    });
+
+    screen.addEventListener('click', function (e) {
+      if (e.target.closest('[data-back]')) { BL.back(); return; }
+
+      var open = e.target.closest('[data-open-cat]');
+      if (open) { BL.openCategory(open.getAttribute('data-open-cat')); return; }
+
+      var ren = e.target.closest('[data-rename-cat]');
+      if (ren) {
+        var id = ren.getAttribute('data-rename-cat');
+        renameSheet(id);
+        return;
+      }
+
+      var del = e.target.closest('[data-del-cat]');
+      if (del) {
+        var did = del.getAttribute('data-del-cat');
+        var name = BL.store.categoryName(did);
+        BL.confirm('Delete "' + name + '"?', 'The recipes in it stay in your box.', 'Delete', function () {
+          BL.store.removeCategory(did);
+          BL.render();
+        });
+      }
+    });
+  });
+
+  function renameSheet(id) {
+    var name = BL.store.categoryName(id);
+    BL.sheet('<h2 class="h1">Rename category</h2>' +
+      '<input class="field" id="ren-cat" value="' + esc(name) + '">' +
+      '<div style="height:14px"></div>' +
+      '<button class="btn btn-primary btn-block" data-save-ren>Save</button>',
+      function (s) {
+        var box = s.querySelector('#ren-cat');
+        setTimeout(function () { box.focus(); box.select(); }, 250);
+        s.querySelector('[data-save-ren]').onclick = function () {
+          BL.store.renameCategory(id, box.value);
+          BL.closeSheet();
+          BL.render();
+        };
+      });
   }
 
   /* ------------------------------------------------------ settings */

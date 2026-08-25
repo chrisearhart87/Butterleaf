@@ -68,7 +68,10 @@
   function unitLabel(id, qty) {
     var u = unit(id);
     if (!u || u.id === 'each') return '';
-    if (u.type === 'count') return (qty === 1 ? u.one : u.many);
+    if (u.type === 'count') return (Math.abs(qty) > 1 ? u.many : u.one);
+    // "cup", "pint", "stick" are written out in full, so they take a plural;
+    // "tsp", "g", "ml" are abbreviations and never do.
+    if (u.abbr === u.one) return (Math.abs(qty) > 1 ? u.many : u.one);
     return u.abbr;
   }
 
@@ -198,8 +201,10 @@
     else {
       var g = gcd(bestN, bestD); bestN /= g; bestD /= g;
       var key = bestN + '/' + bestD;
-      var glyph = GLYPH[key] || key;
-      out = whole > 0 ? (whole + glyph) : glyph;
+      var glyph = GLYPH[key];
+      // "1½" is unambiguous, but "1" + "1/16" would read as eleven sixteenths
+      if (glyph) out = whole > 0 ? (whole + glyph) : glyph;
+      else out = whole > 0 ? (whole + ' ' + key) : key;
     }
     return (neg ? '-' : '') + out;
   }
