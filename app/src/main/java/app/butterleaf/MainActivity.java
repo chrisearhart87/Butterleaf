@@ -580,9 +580,11 @@ public class MainActivity extends Activity {
                                 String name = (jobName == null || jobName.trim().isEmpty())
                                         ? "Butterleaf recipe" : jobName.trim();
                                 PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(name);
+                                // Margins come from the card's own @page rule, so ask
+                                // the print service for none of its own.
                                 pm.print(name, adapter, new PrintAttributes.Builder()
                                         .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
-                                        .setMinMargins(PrintAttributes.Margins.DEFAULT_MARGINS)
+                                        .setMinMargins(PrintAttributes.Margins.NO_MARGINS)
                                         .build());
                                 // Held only until the adapter has what it needs.
                                 printHolder = view;
