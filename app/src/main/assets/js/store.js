@@ -17,7 +17,8 @@
     theme: 'auto',          // auto | light | dark
     units: 'original',      // original | us | metric
     keepAwake: true,
-    saltStyle: 'salt_table'
+    saltStyle: 'salt_table',
+    snoozeMin: 5
   };
 
   function open() {
@@ -176,6 +177,61 @@
       var r = recipesById[recipeId];
       if (!r) return;
       r.categories = ids.slice();
+      api.put(r);
+    },
+
+    /* ------------------------------------------- bake log per recipe */
+
+    /* r.log is a list of dated entries; r.bakes counts the times you made it.
+       Both live on the recipe, so backups carry them without extra work. */
+
+    bakeLog: function (recipeId) {
+      var r = recipesById[recipeId];
+      return (r && r.log) ? r.log.slice().sort(function (a, b) { return b.at - a.at; }) : [];
+    },
+
+    addNote: function (recipeId, text, opts) {
+      var r = recipesById[recipeId];
+      if (!r) return null;
+      text = String(text || '').trim();
+      opts = opts || {};
+      if (!text && !opts.baked) return null;
+      var entry = {
+        id: 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        at: opts.at || Date.now(),
+        text: text,
+        baked: !!opts.baked
+      };
+      if (opts.rating) entry.rating = opts.rating;
+      r.log = (r.log || []).concat([entry]);
+      if (entry.baked) {
+        r.bakes = (r.bakes || 0) + 1;
+        r.lastBaked = entry.at;
+      }
+      api.put(r);
+      return entry;
+    },
+
+    updateNote: function (recipeId, noteId, text) {
+      var r = recipesById[recipeId];
+      if (!r || !r.log) return;
+      r.log = r.log.map(function (n) {
+        return n.id === noteId ? Object.assign({}, n, { text: String(text || '').trim() }) : n;
+      });
+      api.put(r);
+    },
+
+    removeNote: function (recipeId, noteId) {
+      var r = recipesById[recipeId];
+      if (!r || !r.log) return;
+      var gone = r.log.filter(function (n) { return n.id === noteId; })[0];
+      r.log = r.log.filter(function (n) { return n.id !== noteId; });
+      if (gone && gone.baked) {
+        r.bakes = Math.max(0, (r.bakes || 1) - 1);
+        var latest = r.log.filter(function (n) { return n.baked; })
+          .reduce(function (a, n) { return n.at > a ? n.at : a; }, 0);
+        if (latest) r.lastBaked = latest; else delete r.lastBaked;
+      }
       api.put(r);
     },
 

@@ -86,13 +86,34 @@
         '<p class="body" style="padding:0 20px;white-space:pre-wrap;margin:0">' + esc(r.notes) + '</p>';
     }
 
-    html += '<div style="padding:28px 20px 10px;display:flex;gap:10px">' +
+    html += logStrip(r);
+
+    html += '<div style="padding:20px 20px 10px;display:flex;gap:10px">' +
       '<button class="btn btn-ghost" style="flex:1" data-edit>' + icon('edit') + 'Edit</button>' +
       (r.sourceUrl ? '<button class="btn btn-ghost" style="flex:1" data-source>' + icon('link') + 'Source</button>' : '') +
       '</div>';
 
     html += '</div>';
     return html;
+  }
+
+  function logStrip(r) {
+    var log = BL.store.bakeLog(r.id);
+    var bakes = r.bakes || 0;
+    var last = log[0];
+    var sub = bakes
+      ? 'Baked ' + bakes + (bakes === 1 ? ' time' : ' times') +
+        (r.lastBaked ? ', last on ' + new Date(r.lastBaked).toLocaleDateString(undefined,
+          { day: 'numeric', month: 'short' }) : '')
+      : 'Keep track of what you change';
+    return '<div class="section-head"><h2 class="h2">Bake notes</h2>' +
+      (log.length ? '<button class="link" data-log>All ' + log.length + '</button>' : '') + '</div>' +
+      '<div class="pad">' +
+        '<button class="tile" data-log><span class="ti">' + icon('note') + '</span>' +
+        '<span class="grow"><div class="tt">' + esc(sub) + '</div>' +
+        (last && last.text ? '<div class="ts">' + esc(last.text) + '</div>' : '') +
+        '</span><span class="chevron" style="color:var(--muted)">' + icon('chevron') + '</span></button>' +
+      '</div>';
   }
 
   function categoryLine(r) {
@@ -130,7 +151,8 @@
       if (ing.qty == null) {
         html += '<button class="ing' + checked + '" data-ing="' + idx + '">' +
           '<span class="box">' + icon('check') + '</span>' +
-          '<span class="txt">' + esc(ing.raw || ing.item) + '</span></button>';
+          '<span class="txt">' + esc(ing.raw || ing.item) + '</span>' +
+          subTag(ing.item || ing.raw) + '</button>';
         return;
       }
 
@@ -142,7 +164,7 @@
           (qtyText ? '<span class="qty">' + esc(qtyText) + '</span> ' : '') +
           esc(ing.item || ing.raw) +
           (ing.note ? '<span class="note">, ' + esc(ing.note) + '</span>' : '') +
-        '</span></button>';
+        '</span>' + subTag(ing.item || ing.raw) + '</button>';
     });
 
     if (!(r.ingredients || []).length) {
@@ -156,6 +178,15 @@
     if (flourNote) html += '<p class="hint" style="padding:0 20px 6px">' + flourNote + '</p>';
 
     return html;
+  }
+
+  /* A quiet marker on any ingredient we know a stand-in for. Deliberately a
+     span, not a button — a button inside a button is invalid and gets hoisted
+     out of the row by the browser. */
+  function subTag(item) {
+    if (!BL.subs || !BL.subs.find(item)) return '';
+    return '<span class="sub-tag" role="button" tabindex="0" data-sub="' + esc(item) +
+      '" title="Substitutions">' + icon('swap') + '</span>';
   }
 
   function scalingNote(r) {
@@ -189,8 +220,15 @@
     if (!(r.steps || []).length) {
       html += '<div class="empty" style="padding:34px 30px"><p>No method written yet.</p></div>';
     }
-    html += '<div style="padding:20px 20px 0"><button class="btn btn-ghost btn-block" data-awake>' +
-      icon('bell') + (state.awake ? 'Screen staying on' : 'Keep screen on while I bake') + '</button></div>';
+    if ((r.steps || []).length) {
+      html += '<div style="padding:22px 20px 0">' +
+        '<button class="btn btn-primary btn-block" data-bake>' + icon('flame') +
+        'Start bake mode</button>' +
+        '<p class="hint" style="padding-top:10px;text-align:center">One step at a time, screen stays awake, ' +
+        'timers where you need them.</p></div>';
+    }
+    html += '<div style="padding:14px 20px 0"><button class="btn btn-ghost btn-block" data-awake>' +
+      icon('bell') + (state.awake ? 'Screen staying on' : 'Just keep the screen on') + '</button></div>';
     return html;
   }
 
@@ -215,6 +253,8 @@
       el = e.target.closest('[data-open-cat]');
       if (el) { BL.openCategory(el.getAttribute('data-open-cat')); return; }
       if (e.target.closest('[data-edit]')) { BL.go('#/edit/' + r.id); return; }
+      if (e.target.closest('[data-log]')) { BL.go('#/log/' + r.id); return; }
+      if (e.target.closest('[data-bake]')) { BL.go('#/bake/' + r.id); return; }
       if (e.target.closest('[data-source]')) { openSource(r); return; }
 
       el = e.target.closest('[data-tab]');
@@ -225,6 +265,13 @@
 
       el = e.target.closest('[data-sys]');
       if (el) { state.system = el.getAttribute('data-sys'); BL.render(); return; }
+
+      el = e.target.closest('[data-sub]');
+      if (el) {
+        e.stopPropagation();
+        BL.subsSheet(el.getAttribute('data-sub'));
+        return;
+      }
 
       el = e.target.closest('[data-ing]');
       if (el) {
@@ -300,6 +347,15 @@
       '<button class="tile" data-m="cats"><span class="ti">' + icon('list') + '</span>' +
         '<span class="grow"><div class="tt">Categories</div>' +
         '<div class="ts">' + (categoryLine(r) || 'Not in any category yet') + '</div></span></button>' +
+      '<button class="tile" data-m="bake"><span class="ti">' + icon('flame') + '</span>' +
+        '<span class="grow"><div class="tt">Bake mode</div>' +
+        '<div class="ts">Step by step, screen awake</div></span></button>' +
+      '<button class="tile" data-m="log"><span class="ti">' + icon('note') + '</span>' +
+        '<span class="grow"><div class="tt">Bake notes</div>' +
+        '<div class="ts">' + ((r.bakes || 0) ? 'Baked ' + r.bakes + (r.bakes === 1 ? ' time' : ' times') : 'Nothing written down yet') + '</div></span></button>' +
+      '<button class="tile" data-m="print"><span class="ti">' + icon('printer') + '</span>' +
+        '<span class="grow"><div class="tt">Print or save as PDF</div>' +
+        '<div class="ts">A clean card for the fridge' + (state.scale !== 1 ? ', at ' + state.scale + '\u00d7' : '') + '</div></span></button>' +
       '<button class="tile" data-m="list"><span class="ti">' + icon('cart') + '</span>' +
         '<span class="grow"><div class="tt">Add to shopping list</div></span></button>' +
       '<button class="tile" data-m="del"><span class="ti" style="background:var(--accent-wash)">' + icon('trash') + '</span>' +
@@ -315,6 +371,9 @@
             setTimeout(function () { BL.categorySheet(r, function () { BL.render(); }); }, 260);
           }
           if (m === 'list') addAllToList(r);
+          if (m === 'bake') BL.go('#/bake/' + r.id);
+          if (m === 'log') BL.go('#/log/' + r.id);
+          if (m === 'print') BL.printRecipe(r, { scale: state.scale, system: state.system });
           if (m === 'dup') {
             var copy = JSON.parse(JSON.stringify(r));
             copy.id = BL.uid();

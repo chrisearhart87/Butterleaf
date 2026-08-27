@@ -60,6 +60,46 @@
     return best;
   }
 
+
+  /**
+   * A step like "Preheat the oven to 350F" is a cue, not a duration — the
+   * useful thing is a nudge when the oven is actually up to temperature.
+   */
+  function preheatInfo(text) {
+    if (!text) return null;
+    var s = String(text);
+    if (!/\b(pre-?heat|heat the oven|heat oven)\b/i.test(s)) return null;
+    var m = s.match(/(\d{2,3})\s*(?:°|deg(?:rees)?)?\s*([CF])\b/i) ||
+            s.match(/(\d{2,3})\s*°/);
+    var out = { minutes: 15 };
+    if (m) {
+      out.temp = parseInt(m[1], 10);
+      out.scale = (m[2] || '').toUpperCase() || (out.temp > 200 ? 'F' : 'C');
+      // A hot oven takes longer to come up than a moderate one.
+      var f = out.scale === 'C' ? out.temp * 9 / 5 + 32 : out.temp;
+      out.minutes = f >= 450 ? 25 : f >= 375 ? 18 : 12;
+    }
+    return out;
+  }
+
+  /** Every distinct duration mentioned in a step, in minutes, in order. */
+  function allMinutes(text) {
+    if (!text) return [];
+    var s = String(text).toLowerCase();
+    var re = /(\d+(?:\.\d+)?)\s*(?:(?:to|-|\u2013|or)\s*(\d+(?:\.\d+)?)\s*)?(hours?|hrs?|h\b|minutes?|mins?|m\b|seconds?|secs?)/g;
+    var out = [], m;
+    while ((m = re.exec(s)) !== null) {
+      var hi = parseFloat(m[2] || m[1]);
+      var unit = m[3];
+      var mins = /^h/.test(unit) ? hi * 60 : /^s/.test(unit) ? hi / 60 : hi;
+      if (mins >= 0.5 && mins <= 24 * 60) {
+        mins = Math.round(mins);
+        if (out.indexOf(mins) === -1) out.push(mins);
+      }
+    }
+    return out;
+  }
+
   function asArray(v) {
     if (v == null) return [];
     return Array.isArray(v) ? v : [v];
@@ -468,6 +508,8 @@
     tidyHeading: tidyHeading,
     isoMinutes: isoMinutes,
     stepMinutes: stepMinutes,
+    preheatInfo: preheatInfo,
+    allMinutes: allMinutes,
     clean: clean,
     hostOf: hostOf
   };

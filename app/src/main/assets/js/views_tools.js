@@ -22,6 +22,7 @@
         tile('shopping', 'cart', 'Shopping list', listCount ? listCount + ' things still to buy' : 'Build a list from any recipe') +
         tile('categories', 'list', 'Categories', catCount ? catCount + (catCount === 1 ? ' category' : ' categories') : 'Group your recipes however you like') +
         tile('bakers', 'percent', "Baker's percentages", 'Hydration, salt and starter maths for bread') +
+        tile('subs', 'swap', 'Substitutions', 'No buttermilk? No cake flour? Here is what to use instead') +
         tile('settings', 'tools', 'Settings & backup', 'Theme, default units, export your recipe box') +
       '</div>' +
       '<p class="hint" style="padding:20px 20px 30px">Butterleaf keeps everything on this phone. ' +
@@ -749,9 +750,78 @@
 
   /* ------------------------------------------------------ settings */
 
+
+  /* -------------------------------------------------- substitutions */
+
+  var subQ = '';
+
+  BL.route('subs', function (screen) {
+    var hits = BL.subs.search(subQ);
+    screen.innerHTML = '<div class="view">' +
+      header('Substitutions', 'When the tin is empty') +
+      '<div class="pad" style="padding-top:4px">' +
+        '<div class="search">' + icon('search') +
+        '<input id="sub-q" placeholder="Search an ingredient" value="' + esc(subQ) + '" autocomplete="off"></div>' +
+      '</div>' +
+      (hits.length
+        ? hits.map(subCard).join('')
+        : '<div class="empty" style="padding:44px 30px"><h3>Nothing for that</h3>' +
+          '<p>Try the plain name — "buttermilk", "egg", "cake flour".</p></div>') +
+      '<p class="hint" style="padding:16px 20px 34px">Substitutes get you a good bake, not the same bake. ' +
+      'Where the swap changes the result, the note says so.</p>' +
+      '</div>';
+
+    var box = screen.querySelector('#sub-q');
+    box.addEventListener('input', function () {
+      subQ = box.value;
+      var pos = box.selectionStart;
+      BL.render();
+      var b2 = document.getElementById('sub-q');
+      if (b2) { b2.focus(); try { b2.setSelectionRange(pos, pos); } catch (e) {} }
+    });
+
+    screen.addEventListener('click', function (e) {
+      if (e.target.closest('[data-back]')) BL.back();
+    });
+  });
+
+  function subCard(e) {
+    return '<div class="section-head"><h2 class="h2">' + esc(e.name) + '</h2></div>' +
+      '<div class="pad">' +
+        e.swaps.map(function (sw) {
+          return '<div class="swapcard"><div class="sw-h">' + esc(sw[0]) + '</div>' +
+            '<div class="sw-b">' + esc(sw[1]) + '</div></div>';
+        }).join('') +
+        (e.note ? '<p class="hint" style="padding-top:8px">' + esc(e.note) + '</p>' : '') +
+      '</div>';
+  }
+
+  /** The same content, as a sheet, from a tap on an ingredient. */
+  BL.subsSheet = function (item) {
+    var e = BL.subs.find(item);
+    if (!e) { BL.toast('No substitution on file for that'); return; }
+    BL.sheet(
+      '<div class="kicker" style="margin-bottom:6px">Instead of</div>' +
+      '<h2 class="h1" style="margin-bottom:16px">' + esc(e.name) + '</h2>' +
+      '<div style="max-height:52vh;overflow:auto">' +
+        e.swaps.map(function (sw) {
+          return '<div class="swapcard"><div class="sw-h">' + esc(sw[0]) + '</div>' +
+            '<div class="sw-b">' + esc(sw[1]) + '</div></div>';
+        }).join('') +
+        (e.note ? '<p class="hint" style="padding-top:6px">' + esc(e.note) + '</p>' : '') +
+      '</div>' +
+      '<div style="height:14px"></div>' +
+      '<button class="btn btn-ghost btn-block" data-close>Close</button>',
+      function (s) {
+        var b = s.querySelector('[data-close]');
+        if (b) b.onclick = BL.closeSheet;
+      });
+  };
+
   BL.route('settings', function (screen) {
     var s = BL.store.settings();
     var count = BL.store.all().length;
+    var snoozeMin = BL.snoozeMin();
 
     screen.innerHTML = '<div class="view">' +
       header('Settings', 'Butterleaf 1.0') +
@@ -770,6 +840,14 @@
         }).join('') +
       '</div><p class="hint" style="padding-top:10px">How ingredient amounts appear when you open a recipe. ' +
       'You can always flip it per recipe.</p></div>' +
+
+      '<div class="section-head"><h2 class="h2">Timers</h2></div>' +
+      '<div class="pad"><div class="seg">' +
+        [1, 2, 5, 10, 15, 20].map(function (n) {
+          return '<button data-snooze="' + n + '" class="' + (snoozeMin === n ? 'on' : '') + '">' + n + 'm</button>';
+        }).join('') +
+      '</div><p class="hint" style="padding-top:10px">How long Snooze waits when a bake timer goes off. ' +
+      'You can still pick a different length on the alarm itself.</p></div>' +
 
       '<div class="section-head"><h2 class="h2">Your recipe box</h2></div>' +
       '<div class="pad">' +
@@ -793,15 +871,24 @@
     screen.addEventListener('click', function (e) {
       if (e.target.closest('[data-back]')) { BL.back(); return; }
 
-      var t = e.target.closest('[data-theme]');
+      var t = e.target.closest('button[data-theme]');
       if (t) {
         BL.store.saveSettings({ theme: t.getAttribute('data-theme') });
         BL.applyTheme();
         BL.render();
         return;
       }
-      var u = e.target.closest('[data-units]');
+      var u = e.target.closest('button[data-units]');
       if (u) { BL.store.saveSettings({ units: u.getAttribute('data-units') }); BL.render(); return; }
+
+      var z = e.target.closest('button[data-snooze]');
+      if (z) {
+        var mins = parseInt(z.getAttribute('data-snooze'), 10);
+        BL.store.saveSettings({ snoozeMin: mins });
+        BL.native.setSnoozeMinutes(mins);
+        BL.render();
+        return;
+      }
 
       if (e.target.closest('[data-export]')) {
         BL.native.exportBackup(BL.store.exportAll());

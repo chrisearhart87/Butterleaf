@@ -51,6 +51,10 @@
   I.grip = '<circle cx="9" cy="6" r="1.3"/><circle cx="15" cy="6" r="1.3"/><circle cx="9" cy="12" r="1.3"/>' +
     '<circle cx="15" cy="12" r="1.3"/><circle cx="9" cy="18" r="1.3"/><circle cx="15" cy="18" r="1.3"/>';
 
+  I.printer = '<path d="M7 9V3.5h10V9"/><path d="M7 18H5.5A1.5 1.5 0 0 1 4 16.5v-6A1.5 1.5 0 0 1 5.5 9h13a1.5 1.5 0 0 1 1.5 1.5v6a1.5 1.5 0 0 1-1.5 1.5H17"/><path d="M7 14h10v6.5H7z"/>';
+  I.flame = '<path d="M12 21c3.9 0 6.5-2.5 6.5-6 0-4.5-4.5-6-4.5-11-3 1.5-4.6 4-4.6 6.4 0 1.4-.9 2.1-1.8 1.3-.7-.6-1-1.6-1-2.4C5.9 11.2 5.5 12.9 5.5 15c0 3.5 2.6 6 6.5 6z"/>';
+  I.beaker = '<path d="M9.5 3.5v6L4.8 18a2 2 0 0 0 1.8 3h10.8a2 2 0 0 0 1.8-3l-4.7-8.5v-6"/><path d="M8 3.5h8"/><path d="M6.6 14.5h10.8"/>';
+
   BL.icon = icon;
 
   /* -------------------------------------------------- native shim */
@@ -108,7 +112,21 @@
     isAlarmRinging: function () { try { return !!(N && N.isAlarmRinging && N.isAlarmRinging()); } catch (e) { return false; } },
     ringingLabel: function () { try { return (N && N.ringingLabel && N.ringingLabel()) || ''; } catch (e) { return ''; } },
     stopAlarm: function (id) { if (N && N.stopAlarm) { try { N.stopAlarm(id || ''); } catch (e) {} } },
-    snoozeAlarm: function (id) { if (N && N.snoozeAlarm) { try { N.snoozeAlarm(id || ''); } catch (e) {} } },
+    snoozeAlarm: function (id, mins) { if (N && N.snoozeAlarm) { try { N.snoozeAlarm(id || '', mins || 0); } catch (e) {} } },
+    setSnoozeMinutes: function (m) { if (N && N.setSnoozeMinutes) { try { N.setSnoozeMinutes(m); } catch (e) {} } },
+    printHtml: function (html, name) {
+      if (N && N.printHtml) { try { N.printHtml(html, name || 'Butterleaf recipe'); return true; } catch (e) {} }
+      // In a plain browser, the print dialog is right there.
+      try {
+        var w = window.open('', '_blank');
+        if (!w) return false;
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        setTimeout(function () { w.print(); }, 300);
+        return true;
+      } catch (e) { return false; }
+    },
     canScheduleExact: function () { return N && N.canScheduleExact ? N.canScheduleExact() : true; },
     openExactAlarmSettings: function () { if (N && N.openExactAlarmSettings) N.openExactAlarmSettings(); },
     exportBackup: function (json) {
@@ -294,6 +312,10 @@
     var r = parseHash();
     var fn = routes[r.name] || routes.library;
     BL.viewBack = null;
+    if (r.name !== 'bake' && BL.leaveBakeMode) BL.leaveBakeMode();
+    // Bake mode takes the whole screen — the nav bar is just something else
+    // to hit by accident with a floury knuckle.
+    document.body.classList.toggle('bakemode', r.name === 'bake');
 
     // Swap in a clean #screen node so listeners from the previous view
     // cannot pile up and fire twice.
@@ -327,7 +349,7 @@
       bar.classList.add('on');
       bar.innerHTML =
         '<div class="rb-txt"><strong data-rb-label></strong><span>Time\'s up</span></div>' +
-        '<button class="rb-snooze" data-rb-snooze>+5</button>' +
+        '<button class="rb-snooze" data-rb-snooze>+<i data-rb-mins></i></button>' +
         '<button class="rb-stop" data-rb-stop>Stop</button>';
       bar.addEventListener('click', function (e) {
         if (e.target.closest('[data-rb-stop]')) {
@@ -336,15 +358,50 @@
           if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
           BL.render();
         } else if (e.target.closest('[data-rb-snooze]')) {
-          native.snoozeAlarm('');
-          BL.paintRingBar();
-          BL.render();
+          BL.snoozeSheet();
         }
       });
     }
     var l = bar.querySelector('[data-rb-label]');
     if (l) l.textContent = label;
+    var m = bar.querySelector('[data-rb-mins]');
+    if (m) m.textContent = BL.snoozeMin();
     if (!ringPoll) ringPoll = setInterval(BL.paintRingBar, 1500);
+  };
+
+  BL.snoozeMin = function () {
+    var s = BL.store.settings();
+    var n = parseInt(s && s.snoozeMin, 10);
+    return n > 0 ? n : 5;
+  };
+
+  // Tapping snooze offers the usual lengths as well as the saved default,
+  // because "five more minutes" is rarely the number you actually want.
+  BL.snoozeSheet = function () {
+    var mine = BL.snoozeMin();
+    var opts = [1, 2, 5, 10, 15, 20, 30];
+    if (opts.indexOf(mine) === -1) opts.push(mine);
+    opts.sort(function (a, b) { return a - b; });
+    BL.sheet(
+      '<h2 class="h1" style="margin-bottom:16px">Snooze for</h2>' +
+      '<div class="chips" style="flex-wrap:wrap;overflow:visible;gap:8px;padding:0 0 18px">' +
+        opts.map(function (n) {
+          return '<button class="chip' + (n === mine ? ' on' : '') + '" data-snz="' + n + '">' +
+            n + ' min' + (n === mine ? ' · default' : '') + '</button>';
+        }).join('') +
+      '</div>' +
+      '<button class="btn btn-ghost btn-block" data-snz-cancel>Cancel</button>',
+      function (root) {
+        root.addEventListener('click', function (e) {
+          if (e.target.closest('[data-snz-cancel]')) { BL.closeSheet(); return; }
+          var b = e.target.closest('[data-snz]');
+          if (!b) return;
+          native.snoozeAlarm('', parseInt(b.getAttribute('data-snz'), 10));
+          BL.closeSheet();
+          BL.paintRingBar();
+          BL.render();
+        });
+      });
   };
 
   /* ---------------------------------------------------------- nav */
@@ -484,6 +541,7 @@
 
     BL.store.init().then(function () {
       BL.applyTheme();
+      BL.native.setSnoozeMinutes(BL.snoozeMin());
       BL.timers.init();
       window.addEventListener('hashchange', function () {
         BL.stack.push(location.hash);

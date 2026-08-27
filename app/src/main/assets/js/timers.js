@@ -134,6 +134,46 @@
     },
 
     list: function () { return timers; },
+    find: function (id) { return find(id); },
+    remaining: function (t) { return remaining(t); },
+
+    /**
+     * Start a run of stages back to back.
+     *
+     * Every stage gets its own alarm scheduled up front at its own finish time,
+     * so a multi-stage bake keeps moving even if the app is closed the whole
+     * afternoon — nothing has to wake up to arm the next one.
+     */
+    startChain: function (stages, baseLabel) {
+      stages = (stages || []).filter(function (s) { return s && s.mins > 0; });
+      if (!stages.length) return [];
+      var chainId = 'c' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      var at = Date.now();
+      var made = [];
+      stages.forEach(function (st, i) {
+        at += Math.round(st.mins * 60) * 1000;
+        var t = {
+          id: 't' + Date.now().toString(36) + i + Math.random().toString(36).slice(2, 5),
+          label: st.label || ((baseLabel ? baseLabel + ' · ' : '') + 'stage ' + (i + 1)),
+          totalSec: Math.round(st.mins * 60),
+          endAt: at,
+          state: 'running',
+          createdAt: Date.now(),
+          chainId: chainId,
+          stage: i + 1,
+          stages: stages.length
+        };
+        timers.unshift(t);
+        BL.native.scheduleAlarm(t.id, t.endAt, t.label);
+        made.push(t);
+      });
+      save();
+      ensureTick();
+      BL.native.vibrate(16);
+      BL.toast(made.length + ' timers set, back to back');
+      if (location.hash === '#/timers') BL.render();
+      return made;
+    },
 
     /** Picks up anything stopped from the notification shade. */
     reconcile: function () {
