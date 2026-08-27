@@ -638,3 +638,104 @@ html[data-theme='dark'] .seg button.on { background: var(--line); }
 @media (prefers-reduced-motion: reduce) {
   #ringbar { animation: none; }
 }
+
+/* --------------------------------------------------------- bake mode */
+
+/* The screen you leave propped against the mixer: one step, big type,
+   nothing to hunt for with floury hands. */
+.view.bake {
+  min-height: 100%;
+  display: flex; flex-direction: column;
+  background: var(--surface);
+}
+.bake-top {
+  display: flex; align-items: center; gap: 10px;
+  padding: calc(var(--sat) + 6px) 12px 8px;
+}
+.bake-title {
+  flex: 1; text-align: center; font-size: 12.5px; color: var(--muted);
+  letter-spacing: .04em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bake-bar { height: 2px; background: var(--line-soft); margin: 0 20px; border-radius: 2px; }
+.bake-bar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; transition: width .3s var(--ease); }
+
+.bake-body { flex: 1; padding: 30px 24px 20px; display: flex; flex-direction: column; }
+.bake-count {
+  font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+  color: var(--accent); margin-bottom: 18px;
+}
+.bake-step {
+  font-family: var(--serif); font-size: 25px; line-height: 1.44;
+  color: var(--ink); margin: 0 0 28px;
+}
+
+.bake-timer {
+  width: 100%; display: flex; align-items: center; gap: 14px; text-align: left;
+  padding: 14px 16px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-radius: var(--r-md);
+  background: var(--paper); color: var(--ink);
+}
+.bake-timer .bt-left {
+  width: 40px; height: 40px; flex: none; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-wash); color: var(--accent);
+}
+.bake-timer .bt-left svg { width: 19px; height: 19px; }
+.bake-timer .bt-k { font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+.bake-timer .bt-v { font-size: 15px; color: var(--ink); margin-top: 2px; }
+.bake-timer.chain .bt-left { background: color-mix(in srgb, var(--olive) 14%, transparent); color: var(--olive); }
+.bake-timer.quiet { opacity: .72; }
+.bake-timer.live { border-color: var(--accent); background: var(--accent-wash); }
+.bake-timer.live .bt-v { font-variant-numeric: tabular-nums; font-size: 22px; font-family: var(--serif); }
+.bake-timer .bt-stop {
+  flex: none; height: 36px; padding: 0 16px; border-radius: 999px;
+  background: var(--accent); color: var(--accent-ink); font-size: 13px; font-weight: 600;
+}
+
+.bake-foot {
+  display: flex; gap: 10px; padding: 12px 20px calc(var(--sab) + 20px);
+  border-top: 1px solid var(--line-soft); background: var(--surface);
+}
+.bake-foot .btn { flex: 1; height: 54px; }
+.bake-foot .btn[disabled] { opacity: .35; }
+.bake-ing { padding: 9px 0; border-bottom: 1px solid var(--line-soft); font-size: 15px; }
+.bake-ing .qty { color: var(--accent); }
+
+/* ---------------------------------------------------------- bake log */
+
+.lognote {
+  margin: 0 20px 12px; padding: 14px 16px;
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--surface);
+}
+.ln-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ln-when { flex: 1; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.ln-tag {
+  font-size: 10px; letter-spacing: .14em; text-transform: uppercase;
+  color: var(--accent); background: var(--accent-wash);
+  padding: 3px 9px; border-radius: 999px;
+}
+.ln-x { width: 26px; height: 26px; color: var(--muted); display: grid; place-items: center; }
+.ln-x svg { width: 14px; height: 14px; }
+.ln-text { margin: 0; font-size: 15px; line-height: 1.6; color: var(--ink-soft); white-space: pre-wrap; }
+
+/* --------------------------------------------------- substitutions */
+
+.sub-tag {
+  flex: none; width: 30px; height: 30px; margin-left: auto;
+  display: inline-grid; place-items: center; border-radius: 50%;
+  color: var(--muted); background: var(--surface-2);
+}
+.sub-tag svg { width: 15px; height: 15px; }
+.ing.done .sub-tag { opacity: .4; }
+
+.swapcard {
+  padding: 13px 15px; margin-bottom: 10px;
+  border: 1px solid var(--line); border-left: 2px solid var(--accent);
+  border-radius: var(--r-sm); background: var(--surface);
+}
+.swapcard .sw-h { font-size: 14px; font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.swapcard .sw-b { font-size: 14px; line-height: 1.6; color: var(--ink-soft); }
+
+body.bakemode #nav { display: none; }
+body.bakemode #screen { padding-bottom: 0; }
+body.bakemode #ringbar { bottom: calc(var(--sab) + 12px); }
