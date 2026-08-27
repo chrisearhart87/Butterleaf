@@ -506,6 +506,45 @@ public class MainActivity extends Activity {
         @JavascriptInterface
         public void cancelAlarm(String id) {
             AlarmScheduler.cancel(MainActivity.this, id);
+            RingService.stop(MainActivity.this, id);
+        }
+
+        /** True while an alarm is actually ringing right now. */
+        @JavascriptInterface
+        public boolean isAlarmRinging() {
+            try {
+                return RingService.isRinging();
+            } catch (Exception e) {
+                return false;
+            }
+        }
+
+        @JavascriptInterface
+        public String ringingLabel() {
+            try {
+                String s = RingService.currentLabel();
+                return s == null ? "" : s;
+            } catch (Exception e) {
+                return "";
+            }
+        }
+
+        /** Stop the ringing from inside the app. Empty id stops everything. */
+        @JavascriptInterface
+        public void stopAlarm(String id) {
+            try {
+                if (id == null || id.isEmpty()) RingService.stopAll(MainActivity.this);
+                else RingService.stop(MainActivity.this, id);
+            } catch (Exception ignored) {
+            }
+        }
+
+        @JavascriptInterface
+        public void snoozeAlarm(String id) {
+            try {
+                RingService.snooze(MainActivity.this, id);
+            } catch (Exception ignored) {
+            }
         }
 
         @JavascriptInterface

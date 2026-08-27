@@ -1,8 +1,5 @@
 package app.butterleaf;
 
-import android.app.Notification;
-import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -19,53 +16,26 @@ public class AlarmReceiver extends BroadcastReceiver {
 
         AlarmScheduler.forget(ctx, id);
         TimerNotifications.clearOne(ctx, id);
-        Notifs.ensureChannel(ctx);
+        Notifs.ensureAlarmChannel(ctx);
 
-        Intent ring = new Intent(ctx, AlarmActivity.class);
-        ring.setData(Uri.parse("butterleaf://ring/" + id));
-        ring.putExtra("id", id);
-        ring.putExtra("label", label);
-        ring.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
-                | Intent.FLAG_ACTIVITY_CLEAR_TOP
-                | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
+        // The service owns the ring and the notification. Starting a foreground
+        // service from here is allowed because setAlarmClock puts us on the
+        // temporary allowlist for the duration of this broadcast.
+        RingService.start(ctx, id, label);
 
-        PendingIntent full = PendingIntent.getActivity(ctx, id.hashCode(), ring,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        Intent dismiss = new Intent(ctx, AlarmActivity.class);
-        dismiss.setData(Uri.parse("butterleaf://dismiss/" + id));
-        dismiss.putExtra("id", id);
-        dismiss.putExtra("dismiss", true);
-        dismiss.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        PendingIntent dismissPi = PendingIntent.getActivity(ctx, ("d" + id).hashCode(), dismiss,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
-
-        Notification n = new Notification.Builder(ctx, Notifs.CHANNEL_ALARM)
-                .setSmallIcon(R.drawable.ic_timer)
-                .setContentTitle(label)
-                .setContentText("Time's up — your bake is ready to check.")
-                .setCategory(Notification.CATEGORY_ALARM)
-                .setPriority(Notification.PRIORITY_MAX)
-                .setAutoCancel(true)
-                .setOngoing(true)
-                .setVibrate(Notifs.PATTERN)
-                .setContentIntent(full)
-                .setFullScreenIntent(full, true)
-                .addAction(new Notification.Action.Builder(
-                        Icon(ctx), "Stop", dismissPi).build())
-                .build();
-
-        NotificationManager nm = ctx.getSystemService(NotificationManager.class);
-        if (nm != null) nm.notify(id.hashCode(), n);
-
-        // Best effort: on many devices this brings the ringing screen straight up.
+        // Best effort: on most devices this brings the ringing screen straight
+        // up. If the OS declines, the full-screen intent on the service's
+        // notification is the fallback.
         try {
+            Intent ring = new Intent(ctx, AlarmActivity.class);
+            ring.setData(Uri.parse("butterleaf://ring/" + id));
+            ring.putExtra("id", id);
+            ring.putExtra("label", label);
+            ring.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                    | Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
             ctx.startActivity(ring);
         } catch (Exception ignored) {
         }
-    }
-
-    private static android.graphics.drawable.Icon Icon(Context ctx) {
-        return android.graphics.drawable.Icon.createWithResource(ctx, R.drawable.ic_timer);
     }
 }

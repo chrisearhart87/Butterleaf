@@ -1,21 +1,15 @@
 package app.butterleaf;
 
 import android.app.Activity;
-import android.app.NotificationManager;
+import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.media.AudioAttributes;
-import android.media.MediaPlayer;
-import android.media.RingtoneManager;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowManager;
@@ -23,65 +17,82 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.lang.ref.WeakReference;
+
+/**
+ * The full-screen "time's up" screen.
+ *
+ * It no longer owns the sound. RingService does. This screen is only a set of
+ * buttons — closing it, backgrounding it, or swiping it away leaves the alarm
+ * ringing, exactly like a phone's own alarm clock. Only Stop or Snooze end it.
+ */
 public class AlarmActivity extends Activity {
 
-    private static final long AUTO_STOP_MS = 5 * 60 * 1000L;
+    private static WeakReference<AlarmActivity> LIVE;
 
-    private MediaPlayer player;
-    private Vibrator vibrator;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private String timerId = "timer";
     private String label = "Bake timer";
-    private long startedAt;
     private TextView elapsedView;
 
     private final Runnable tick = new Runnable() {
         @Override
         public void run() {
-            long s = (System.currentTimeMillis() - startedAt) / 1000L;
+            if (!RingService.isRinging()) {
+                finish();
+                return;
+            }
+            long s = Math.max(0, (System.currentTimeMillis() - RingService.ringingSince()) / 1000L);
             if (elapsedView != null) {
                 elapsedView.setText(String.format(java.util.Locale.US,
                         "ringing for %d:%02d", s / 60, s % 60));
-            }
-            if (s * 1000L > AUTO_STOP_MS) {
-                stopEverything();
-                finish();
-                return;
             }
             handler.postDelayed(this, 1000);
         }
     };
 
+    /** Called by RingService once the alarm has actually been stopped. */
+    public static void dismissIfShowing(Context ctx) {
+        try {
+            final AlarmActivity a = LIVE == null ? null : LIVE.get();
+            if (a == null || a.isFinishing()) return;
+            a.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    a.finish();
+                }
+            });
+        } catch (Exception ignored) {
+        }
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        LIVE = new WeakReference<>(this);
 
-        Intent i = getIntent();
-        if (i != null) {
-            if (i.getStringExtra("id") != null) timerId = i.getStringExtra("id");
-            if (i.getStringExtra("label") != null) label = i.getStringExtra("label");
-            if (i.getBooleanExtra("dismiss", false)) {
-                clearNotification();
-                finish();
-                return;
-            }
-        }
+        readIntent(getIntent());
 
         showOverLockscreen();
-        clearNotification();
         setContentView(buildUi());
-        startRinging();
-        startedAt = System.currentTimeMillis();
         handler.post(tick);
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
-        if (intent != null && intent.getBooleanExtra("dismiss", false)) {
-            stopEverything();
-            finish();
-        }
+        readIntent(intent);
+        setContentView(buildUi());
+        handler.removeCallbacks(tick);
+        handler.post(tick);
+    }
+
+    private void readIntent(Intent i) {
+        if (i == null) return;
+        if (i.getStringExtra("id") != null) timerId = i.getStringExtra("id");
+        if (i.getStringExtra("label") != null) label = i.getStringExtra("label");
+        // A stale launcher entry pointing at an alarm nobody is ringing anymore.
+        if (!RingService.isRinging()) finish();
     }
 
     private void showOverLockscreen() {
@@ -141,19 +152,25 @@ public class AlarmActivity extends Activity {
 
         Button stop = filledButton("STOP", raspberry, Color.WHITE);
         stop.setOnClickListener(v -> {
-            stopEverything();
+            RingService.stop(this, timerId);
             finish();
         });
         root.addView(stop);
 
         Button snooze = outlineButton("SNOOZE 5 MIN", paper);
         snooze.setOnClickListener(v -> {
-            stopEverything();
-            AlarmScheduler.schedule(this, timerId + "_snooze",
-                    System.currentTimeMillis() + 5 * 60 * 1000L, label + " (snoozed)");
+            RingService.snooze(this, timerId);
             finish();
         });
         root.addView(snooze);
+
+        TextView hint = new TextView(this);
+        hint.setText("Keeps ringing until you stop it.");
+        hint.setTextColor(Color.parseColor("#57514C"));
+        hint.setTextSize(12);
+        hint.setGravity(Gravity.CENTER);
+        hint.setPadding(0, dp(18), 0, 0);
+        root.addView(hint);
 
         return root;
     }
@@ -198,68 +215,17 @@ public class AlarmActivity extends Activity {
         return Math.round(v * getResources().getDisplayMetrics().density);
     }
 
-    private void startRinging() {
-        try {
-            Uri uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
-            if (uri == null) uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-            if (uri != null) {
-                player = new MediaPlayer();
-                player.setDataSource(this, uri);
-                player.setAudioAttributes(new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_ALARM)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                        .build());
-                player.setLooping(true);
-                player.prepare();
-                player.start();
-            }
-        } catch (Exception ignored) {
-        }
-
-        try {
-            vibrator = (Vibrator) getSystemService(VIBRATOR_SERVICE);
-            if (vibrator != null && vibrator.hasVibrator()) {
-                if (Build.VERSION.SDK_INT >= 26) {
-                    vibrator.vibrate(VibrationEffect.createWaveform(Notifs.PATTERN, 1));
-                } else {
-                    vibrator.vibrate(Notifs.PATTERN, 1);
-                }
-            }
-        } catch (Exception ignored) {
-        }
-    }
-
-    private void stopEverything() {
-        handler.removeCallbacks(tick);
-        try {
-            if (player != null) {
-                player.stop();
-                player.release();
-                player = null;
-            }
-        } catch (Exception ignored) {
-        }
-        try {
-            if (vibrator != null) vibrator.cancel();
-        } catch (Exception ignored) {
-        }
-        clearNotification();
-    }
-
-    private void clearNotification() {
-        NotificationManager nm = getSystemService(NotificationManager.class);
-        if (nm != null) nm.cancel(timerId.hashCode());
-    }
-
     @Override
     protected void onDestroy() {
-        stopEverything();
+        handler.removeCallbacks(tick);
+        if (LIVE != null && LIVE.get() == this) LIVE = null;
+        // Deliberately does NOT silence anything.
         super.onDestroy();
     }
 
     @Override
     public void onBackPressed() {
-        stopEverything();
+        // Leave it ringing — the notification is still there with Stop on it.
         super.onBackPressed();
     }
 }

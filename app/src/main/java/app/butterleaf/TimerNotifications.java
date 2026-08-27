@@ -73,6 +73,21 @@ public class TimerNotifications {
         }
     }
 
+    /**
+     * Records that a timer is finished with, without cancelling any alarm.
+     * The web layer picks these up and clears the timer from its own list.
+     */
+    public static void markCancelled(Context ctx, String id) {
+        if (id == null || id.isEmpty()) return;
+        try {
+            SharedPreferences p = prefs(ctx);
+            Set<String> cancelled = new HashSet<>(p.getStringSet(KEY_CANCELLED, new HashSet<String>()));
+            cancelled.add(id);
+            p.edit().putStringSet(KEY_CANCELLED, cancelled).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
     /** Ids stopped from the shade since the app last looked, then forgets them. */
     public static String takeCancelled(Context ctx) {
         JSONArray arr = new JSONArray();
