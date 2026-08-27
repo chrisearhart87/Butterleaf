@@ -598,3 +598,43 @@ html[data-theme='dark'] .seg button.on { background: var(--line); }
 .tile .ti svg { width: 20px; height: 20px; }
 .tile .tt { font-size: 15.5px; }
 .tile .ts { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+
+/* ------------------------------------------------ ringing alarm bar */
+
+/* Sits above the nav while a timer is going off. The sound itself lives in
+   the Android service — this is only the in-app way to silence it. */
+#ringbar {
+  position: fixed; left: 12px; right: 12px;
+  bottom: calc(var(--nav-h) + var(--sab) + 12px);
+  z-index: 80;
+  display: none; align-items: center; gap: 12px;
+  padding: 12px 12px 12px 18px;
+  border-radius: 20px;
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 14px 40px -12px rgba(0, 0, 0, .55);
+  animation: rb-in .3s var(--ease) both, rb-pulse 1.6s ease-in-out .3s infinite;
+}
+#ringbar.on { display: flex; }
+#ringbar .rb-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#ringbar .rb-txt strong {
+  font-size: 15px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+#ringbar .rb-txt span { font-size: 12px; opacity: .8; letter-spacing: .06em; text-transform: uppercase; }
+#ringbar button {
+  flex: none; border-radius: 999px; font-size: 14px; font-weight: 600;
+  padding: 0 18px; height: 40px; color: #fff;
+  border: 1px solid rgba(255, 255, 255, .45); background: transparent;
+}
+#ringbar .rb-stop { background: #fff; color: var(--accent); border-color: #fff; }
+#ringbar .rb-snooze { padding: 0 14px; }
+
+@keyframes rb-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes rb-pulse {
+  0%, 100% { box-shadow: 0 14px 40px -12px rgba(0, 0, 0, .55); }
+  50% { box-shadow: 0 14px 40px -12px rgba(0, 0, 0, .55), 0 0 0 6px color-mix(in srgb, var(--accent) 22%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ringbar { animation: none; }
+}
