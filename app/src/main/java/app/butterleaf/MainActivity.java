@@ -12,6 +12,9 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.print.PrintAttributes;
+import android.print.PrintDocumentAdapter;
+import android.print.PrintManager;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
@@ -62,6 +65,7 @@ public class MainActivity extends Activity {
     private String pendingRoute;
     private final ExecutorService io = Executors.newFixedThreadPool(3);
     private final Handler main = new Handler(Looper.getMainLooper());
+    private WebView printHolder;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -540,10 +544,66 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
-        public void snoozeAlarm(String id) {
+        public void snoozeAlarm(String id, int minutes) {
             try {
-                RingService.snooze(MainActivity.this, id);
+                RingService.snooze(MainActivity.this, id, minutes);
             } catch (Exception ignored) {
+            }
+        }
+
+        /** Keeps the native side in step with the snooze length in Settings. */
+        @JavascriptInterface
+        public void setSnoozeMinutes(int minutes) {
+            try {
+                RingService.setSnoozeMinutes(MainActivity.this, minutes);
+            } catch (Exception ignored) {
+            }
+        }
+
+        /**
+         * Hand a finished recipe card to Android's own print stack, which is
+         * also where "Save as PDF" lives — so one bridge call covers printing
+         * and sharing a PDF without us drawing a single page ourselves.
+         */
+        @JavascriptInterface
+        public void printHtml(final String html, final String jobName) {
+            main.post(() -> {
+                try {
+                    final WebView print = new WebView(MainActivity.this);
+                    print.getSettings().setJavaScriptEnabled(false);
+                    print.setWebViewClient(new WebViewClient() {
+                        @Override
+                        public void onPageFinished(WebView view, String url) {
+                            try {
+                                PrintManager pm = (PrintManager) getSystemService(PRINT_SERVICE);
+                                if (pm == null) { toast("Printing is not available on this phone"); return; }
+                                String name = (jobName == null || jobName.trim().isEmpty())
+                                        ? "Butterleaf recipe" : jobName.trim();
+                                PrintDocumentAdapter adapter = view.createPrintDocumentAdapter(name);
+                                pm.print(name, adapter, new PrintAttributes.Builder()
+                                        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+                                        .setMinMargins(PrintAttributes.Margins.DEFAULT_MARGINS)
+                                        .build());
+                                // Held only until the adapter has what it needs.
+                                printHolder = view;
+                            } catch (Exception e) {
+                                toast("Could not start printing");
+                            }
+                        }
+                    });
+                    print.loadDataWithBaseURL(null, html, "text/html", "utf-8", null);
+                } catch (Exception e) {
+                    toast("Could not start printing");
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public int snoozeMinutes() {
+            try {
+                return RingService.snoozeMinutes(MainActivity.this);
+            } catch (Exception e) {
+                return 5;
             }
         }
 

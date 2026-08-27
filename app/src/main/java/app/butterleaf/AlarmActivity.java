@@ -157,12 +157,38 @@ public class AlarmActivity extends Activity {
         });
         root.addView(stop);
 
-        Button snooze = outlineButton("SNOOZE 5 MIN", paper);
+        int mine = RingService.snoozeMinutes(this);
+        Button snooze = outlineButton("SNOOZE " + mine + " MIN", paper);
         snooze.setOnClickListener(v -> {
-            RingService.snooze(this, timerId);
+            RingService.snooze(this, timerId, mine);
             finish();
         });
         root.addView(snooze);
+
+        // Sometimes five minutes is not the five minutes you wanted.
+        TextView pickHint = new TextView(this);
+        pickHint.setText("OR SNOOZE FOR");
+        pickHint.setTextColor(Color.parseColor("#6F6862"));
+        pickHint.setTextSize(11);
+        pickHint.setLetterSpacing(0.2f);
+        pickHint.setGravity(Gravity.CENTER);
+        pickHint.setPadding(0, dp(22), 0, dp(10));
+        root.addView(pickHint);
+
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER);
+        int[] choices = {1, 2, 5, 10, 20};
+        for (int m : choices) {
+            final int mm = m;
+            Button chip = chipButton(m + "m", paper);
+            chip.setOnClickListener(v -> {
+                RingService.snooze(this, timerId, mm);
+                finish();
+            });
+            row.addView(chip);
+        }
+        root.addView(row);
 
         TextView hint = new TextView(this);
         hint.setText("Keeps ringing until you stop it.");
@@ -207,6 +233,26 @@ public class AlarmActivity extends Activity {
         b.setBackground(d);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, dp(54));
+        b.setLayoutParams(lp);
+        return b;
+    }
+
+    private Button chipButton(String text, int fg) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setTextColor(fg);
+        b.setTextSize(13);
+        b.setAllCaps(false);
+        b.setPadding(0, 0, 0, 0);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        GradientDrawable d = new GradientDrawable();
+        d.setColor(Color.parseColor("#1D1A18"));
+        d.setStroke(dp(1), Color.parseColor("#332F2C"));
+        d.setCornerRadius(dp(999));
+        b.setBackground(d);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(58), dp(44));
+        lp.setMarginEnd(dp(8));
         b.setLayoutParams(lp);
         return b;
     }

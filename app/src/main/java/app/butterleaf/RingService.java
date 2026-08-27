@@ -41,7 +41,9 @@ public class RingService extends Service {
     private static final int FG_ID = 0xB17E;
     /** Nobody wants a timer howling all night if the phone is left behind. */
     private static final long GIVE_UP_MS = 15 * 60 * 1000L;
-    private static final long SNOOZE_MS = 5 * 60 * 1000L;
+    private static final String PREFS = "butterleaf_alarms";
+    private static final String KEY_SNOOZE = "snoozeMin";
+    private static final int DEFAULT_SNOOZE_MIN = 5;
 
     /** Every alarm currently ringing, oldest first. */
     private static final LinkedHashMap<String, String> RINGING = new LinkedHashMap<>();
@@ -79,9 +81,40 @@ public class RingService extends Service {
         launch(ctx, new Intent(ctx, RingService.class).setAction(ACTION_STOP).putExtra("id", id));
     }
 
+    /** Snooze for the user's chosen default. */
     public static void snooze(Context ctx, String id) {
+        snooze(ctx, id, 0);
+    }
+
+    /** Snooze for a specific number of minutes; 0 means "use the default". */
+    public static void snooze(Context ctx, String id, int minutes) {
         if (!isRinging()) return;
-        launch(ctx, new Intent(ctx, RingService.class).setAction(ACTION_SNOOZE).putExtra("id", id));
+        launch(ctx, new Intent(ctx, RingService.class)
+                .setAction(ACTION_SNOOZE)
+                .putExtra("id", id)
+                .putExtra("mins", minutes));
+    }
+
+    /** How long Snooze waits, in minutes. Kept in prefs so the service, the
+     *  notification and the alarm screen all agree without asking the WebView. */
+    public static int snoozeMinutes(Context ctx) {
+        try {
+            int m = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .getInt(KEY_SNOOZE, DEFAULT_SNOOZE_MIN);
+            return m < 1 ? DEFAULT_SNOOZE_MIN : Math.min(m, 120);
+        } catch (Exception e) {
+            return DEFAULT_SNOOZE_MIN;
+        }
+    }
+
+    public static void setSnoozeMinutes(Context ctx, int minutes) {
+        try {
+            if (minutes < 1) minutes = DEFAULT_SNOOZE_MIN;
+            if (minutes > 120) minutes = 120;
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                    .edit().putInt(KEY_SNOOZE, minutes).apply();
+        } catch (Exception ignored) {
+        }
     }
 
     public static void stopAll(Context ctx) {
@@ -168,12 +201,14 @@ public class RingService extends Service {
                 snoozeLabel = RINGING.get(id);
             }
             if (snoozeLabel == null) snoozeLabel = label;
+            int mins = intent == null ? 0 : intent.getIntExtra("mins", 0);
+            if (mins < 1) mins = snoozeMinutes(this);
             // Hush first — release() clears the stored alarm — then re-arm it,
             // keeping the same id so the timer in the app stays the same timer.
             release(id, false);
             if (id != null) {
                 AlarmScheduler.schedule(this, id,
-                        System.currentTimeMillis() + SNOOZE_MS, snoozeLabel);
+                        System.currentTimeMillis() + mins * 60000L, snoozeLabel);
             }
             return START_NOT_STICKY;
         }
@@ -388,8 +423,9 @@ public class RingService extends Service {
         PendingIntent openPi = PendingIntent.getActivity(this, ("o" + id).hashCode(), open,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
 
-        PendingIntent stopPi = servicePi(ACTION_STOP, id, "s");
-        PendingIntent snoozePi = servicePi(ACTION_SNOOZE, id, "z");
+        int mins = snoozeMinutes(this);
+        PendingIntent stopPi = servicePi(ACTION_STOP, id, "s", 0);
+        PendingIntent snoozePi = servicePi(ACTION_SNOOZE, id, "z", mins);
 
         String text = count > 1
                 ? "Time's up — and " + (count - 1) + " more timer" + (count > 2 ? "s" : "") + " finished."
@@ -410,21 +446,22 @@ public class RingService extends Service {
                         "Stop", stopPi).build())
                 .addAction(new Notification.Action.Builder(
                         android.graphics.drawable.Icon.createWithResource(this, R.drawable.ic_timer),
-                        "Snooze 5 min", snoozePi).build());
+                        "Snooze " + mins + " min", snoozePi).build());
         if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
         return b.build();
     }
 
-    private PendingIntent servicePi(String action, String id, String tag) {
+    private PendingIntent servicePi(String action, String id, String tag, int mins) {
         Intent i = new Intent(this, RingService.class)
                 .setAction(action)
-                .setData(Uri.parse("butterleaf://" + tag + "/" + id))
-                .putExtra("id", id);
+                .setData(Uri.parse("butterleaf://" + tag + "/" + id + "/" + mins))
+                .putExtra("id", id)
+                .putExtra("mins", mins);
         if (Build.VERSION.SDK_INT >= 26) {
-            return PendingIntent.getForegroundService(this, (tag + id).hashCode(), i,
+            return PendingIntent.getForegroundService(this, (tag + id + mins).hashCode(), i,
                     PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         }
-        return PendingIntent.getService(this, (tag + id).hashCode(), i,
+        return PendingIntent.getService(this, (tag + id + mins).hashCode(), i,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
     }
 }
