@@ -105,6 +105,10 @@
 
     scheduleAlarm: function (id, at, label) { if (N && N.scheduleAlarm) N.scheduleAlarm(id, at, label || 'Bake timer'); },
     cancelAlarm: function (id) { if (N && N.cancelAlarm) N.cancelAlarm(id); },
+    isAlarmRinging: function () { try { return !!(N && N.isAlarmRinging && N.isAlarmRinging()); } catch (e) { return false; } },
+    ringingLabel: function () { try { return (N && N.ringingLabel && N.ringingLabel()) || ''; } catch (e) { return ''; } },
+    stopAlarm: function (id) { if (N && N.stopAlarm) { try { N.stopAlarm(id || ''); } catch (e) {} } },
+    snoozeAlarm: function (id) { if (N && N.snoozeAlarm) { try { N.snoozeAlarm(id || ''); } catch (e) {} } },
     canScheduleExact: function () { return N && N.canScheduleExact ? N.canScheduleExact() : true; },
     openExactAlarmSettings: function () { if (N && N.openExactAlarmSettings) N.openExactAlarmSettings(); },
     exportBackup: function (json) {
@@ -150,6 +154,7 @@
   };
   window.__syncFromNative = function () {
     if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
+    if (BL.paintRingBar) BL.paintRingBar();
   };
   window.__onSharedUrl = function (url) {
     BL.pendingSharedUrl = url;
@@ -299,6 +304,47 @@
     fn(screen, r.arg, r.parts);
     screen.scrollTop = 0;
     paintNav(r.name);
+    BL.paintRingBar();
+  };
+
+  /* ------------------------------------------------- ringing alarm bar */
+
+  // While a timer is going off, the alarm belongs to the OS service, not to
+  // this page. All we do is offer a way to stop it that isn't the shade.
+  var ringPoll = null;
+  BL.paintRingBar = function () {
+    var bar = document.getElementById('ringbar');
+    if (!bar) return;
+    var on = native.isAlarmRinging();
+    if (!on) {
+      bar.classList.remove('on');
+      bar.innerHTML = '';
+      if (ringPoll) { clearInterval(ringPoll); ringPoll = null; }
+      return;
+    }
+    var label = native.ringingLabel() || 'Bake timer';
+    if (!bar.classList.contains('on')) {
+      bar.classList.add('on');
+      bar.innerHTML =
+        '<div class="rb-txt"><strong data-rb-label></strong><span>Time\'s up</span></div>' +
+        '<button class="rb-snooze" data-rb-snooze>+5</button>' +
+        '<button class="rb-stop" data-rb-stop>Stop</button>';
+      bar.addEventListener('click', function (e) {
+        if (e.target.closest('[data-rb-stop]')) {
+          native.stopAlarm('');
+          BL.paintRingBar();
+          if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
+          BL.render();
+        } else if (e.target.closest('[data-rb-snooze]')) {
+          native.snoozeAlarm('');
+          BL.paintRingBar();
+          BL.render();
+        }
+      });
+    }
+    var l = bar.querySelector('[data-rb-label]');
+    if (l) l.textContent = label;
+    if (!ringPoll) ringPoll = setInterval(BL.paintRingBar, 1500);
   };
 
   /* ---------------------------------------------------------- nav */

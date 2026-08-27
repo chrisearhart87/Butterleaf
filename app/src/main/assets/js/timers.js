@@ -201,9 +201,11 @@
       var t = find(id);
       if (!t) return;
       if (t.state === 'done') {
+        BL.native.stopAlarm(t.id);
         t.state = 'running';
         t.endAt = Date.now() + mins * 60000;
         t.totalSec = mins * 60;
+        BL.native.scheduleAlarm(t.id, t.endAt, t.label);
       } else if (t.state === 'paused') {
         t.leftSec += mins * 60;
         t.totalSec += mins * 60;
@@ -219,6 +221,7 @@
     reset: function (id) {
       var t = find(id);
       if (!t) return;
+      BL.native.stopAlarm(t.id);
       t.endAt = Date.now() + t.totalSec * 1000;
       t.state = 'running';
       delete t.doneAt;
