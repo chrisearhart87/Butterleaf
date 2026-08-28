@@ -22,6 +22,8 @@ public class AlarmScheduler {
     private static final String KEY = "pending";
 
     public static void schedule(Context ctx, String id, long fireAt, String label) {
+        // An empty id would arm an alarm nothing can ever cancel.
+        if (id == null || id.trim().isEmpty()) return;
         remember(ctx, id, fireAt, label);
         AlarmManager am = ctx.getSystemService(AlarmManager.class);
         if (am == null) return;

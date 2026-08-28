@@ -29,6 +29,15 @@ public class TimerNotifications {
     private static final String KEY_CANCELLED = "cancelled";
     private static final String KEY_SHOWN = "shown";
 
+    /**
+     * What each posted notification currently says. A running timer's
+     * notification counts itself down, so once it is posted its content never
+     * changes — re-posting it on every save is pure waste, and enough of it
+     * trips Android's per-package enqueue limit ("Package enqueue rate is
+     * 10.7. Shedding…"), at which point the shade silently loses timers.
+     */
+    private static final java.util.Map<String, String> POSTED = new java.util.HashMap<>();
+
     /** Replaces the shade contents with exactly the timers passed in. */
     public static void sync(Context ctx, String timersJson) {
         try {
@@ -41,18 +50,30 @@ public class TimerNotifications {
 
             for (Timer t : timers) {
                 keep.add(t.id);
+                String sig = signature(t);
+                if (sig.equals(POSTED.get(t.id))) continue;
                 nm.notify(t.id.hashCode(), build(ctx, t));
+                POSTED.put(t.id, sig);
             }
 
             SharedPreferences p = prefs(ctx);
             Set<String> was = new HashSet<>(p.getStringSet(KEY_SHOWN, new HashSet<String>()));
             for (String old : was) {
-                if (!keep.contains(old)) nm.cancel(old.hashCode());
+                if (!keep.contains(old)) {
+                    nm.cancel(old.hashCode());
+                    POSTED.remove(old);
+                }
             }
+            POSTED.keySet().retainAll(keep);
             p.edit().putStringSet(KEY_SHOWN, keep).apply();
         } catch (Exception ignored) {
             // the shade is a convenience — never let it take the app down
         }
+    }
+
+    /** Everything the notification actually renders. */
+    private static String signature(Timer t) {
+        return t.label + '|' + t.endAt + '|' + t.paused + '|' + (t.paused ? t.leftSec : 0);
     }
 
     /** Called when the user taps Stop on a notification. */
@@ -62,6 +83,7 @@ public class TimerNotifications {
             AlarmScheduler.cancel(ctx, id);
             NotificationManager nm = ctx.getSystemService(NotificationManager.class);
             if (nm != null) nm.cancel(id.hashCode());
+            POSTED.remove(id);
 
             SharedPreferences p = prefs(ctx);
             Set<String> cancelled = new HashSet<>(p.getStringSet(KEY_CANCELLED, new HashSet<String>()));
@@ -105,6 +127,7 @@ public class TimerNotifications {
         try {
             NotificationManager nm = ctx.getSystemService(NotificationManager.class);
             if (nm != null) nm.cancel(id.hashCode());
+            POSTED.remove(id);
             SharedPreferences p = prefs(ctx);
             Set<String> shown = new HashSet<>(p.getStringSet(KEY_SHOWN, new HashSet<String>()));
             shown.remove(id);

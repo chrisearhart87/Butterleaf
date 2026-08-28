@@ -93,7 +93,10 @@ public class MainActivity extends Activity {
 
         web.setBackgroundColor(isNight() ? Color.parseColor("#121110") : Color.parseColor("#FCFBF9"));
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
-        if (Build.VERSION.SDK_INT >= 19) WebView.setWebContentsDebuggingEnabled(false);
+        // Inspectable only when the build itself is debuggable — release APKs
+        // stay closed.
+        boolean debuggable = (getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0;
+        WebView.setWebContentsDebuggingEnabled(debuggable);
 
         web.setWebViewClient(new WebViewClient() {
             @Override

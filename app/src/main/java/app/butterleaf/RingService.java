@@ -161,6 +161,10 @@ public class RingService extends Service {
         String id = intent == null ? null : intent.getStringExtra("id");
         String label = intent == null ? null : intent.getStringExtra("label");
         if (label == null || label.trim().isEmpty()) label = "Bake timer";
+        // The in-app bar and the sheet address "whatever is ringing" with an
+        // empty id. Treat that the same as no id at all, or Stop and Snooze
+        // quietly act on a timer that does not exist.
+        if (id != null && id.trim().isEmpty()) id = null;
 
         if (ACTION_START.equals(action) && id != null) {
             synchronized (RINGING) {
@@ -206,7 +210,7 @@ public class RingService extends Service {
             // Hush first — release() clears the stored alarm — then re-arm it,
             // keeping the same id so the timer in the app stays the same timer.
             release(id, false);
-            if (id != null) {
+            if (id != null && !id.trim().isEmpty()) {
                 AlarmScheduler.schedule(this, id,
                         System.currentTimeMillis() + mins * 60000L, snoozeLabel);
             }
