@@ -380,6 +380,11 @@
             copy.title = r.title + ' (variation)';
             copy.favorite = false;
             delete copy._blob;
+            // A variation starts its own history — the original's bakes and
+            // notes belong to the original.
+            delete copy.log;
+            delete copy.bakes;
+            delete copy.lastBaked;
             copy.createdAt = Date.now();
             BL.store.put(copy);
             BL.go('#/edit/' + copy.id);

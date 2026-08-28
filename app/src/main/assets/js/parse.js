@@ -138,7 +138,18 @@
 
   function yieldFrom(v) {
     if (v == null) return '';
-    if (Array.isArray(v)) v = v[0];
+    // recipeYield is routinely ["1", "1 loaf"] — the bare number tells nobody
+    // anything, so take the most descriptive entry rather than the first.
+    if (Array.isArray(v)) {
+      var best = '';
+      v.forEach(function (x) {
+        var t = clean(String(x == null ? '' : x));
+        if (!t) return;
+        var better = /[a-z]/i.test(t) && !/[a-z]/i.test(best);
+        if (!best || better || (/[a-z]/i.test(t) === /[a-z]/i.test(best) && t.length > best.length)) best = t;
+      });
+      return best;
+    }
     return clean(String(v));
   }
 
@@ -147,14 +158,7 @@
     function push(text, group) {
       var t = clean(text);
       if (!t) return;
-      // very long blobs are usually whole paragraphs — split them
-      if (t.length > 320 && /\.\s/.test(t)) {
-        t.split(/(?<=\.)\s+(?=[A-Z])/).forEach(function (p) {
-          if (p.trim().length > 2) out.push({ text: p.trim(), group: group });
-        });
-      } else {
-        out.push({ text: t, group: group });
-      }
+      out.push({ text: t, group: group });
     }
     (function walk(n, group) {
       if (n == null) return;
@@ -187,6 +191,19 @@
         push(n.text || n.name || n.description || '', group);
       }
     })(v, '');
+
+    // Sites that give real per-step items are left alone — splitting their
+    // paragraphs turned a birthday cake into thirty-two "steps". Only when the
+    // whole method arrived as one blob is there anything to break up.
+    if (out.length === 1 && out[0].text.length > 400 && /\.\s/.test(out[0].text)) {
+      var one = out[0];
+      var parts = one.text.split(/(?<=\.)\s+(?=[A-Z])/)
+        .map(function (p) { return p.trim(); })
+        .filter(function (p) { return p.length > 2; });
+      if (parts.length > 1) {
+        out = parts.map(function (p) { return { text: p, group: one.group }; });
+      }
+    }
     return out;
   }
 
@@ -224,6 +241,16 @@
     return false;
   }
 
+  /* Headings that name the list itself, or a neighbouring block, rather than a
+     part of the bake. Left in, every allrecipes import grew a pointless
+     "Ingredients" section and BBC Good Food imports grew a "Nutrition" one. */
+  var NOT_A_SECTION = /^(ingredients?|instructions?|directions?|method|steps?|nutrition( facts| information)?|equipment|you will need|notes?|tips?|recipe|shopping list|substitutions?|storage|make ahead|variations?|ratings?|reviews?|advertisement)$/i;
+
+  function isSectionName(text) {
+    var t = String(text || '').replace(/[:\-–—]\s*$/, '').trim();
+    return !!t && t.length < 60 && !NOT_A_SECTION.test(t);
+  }
+
   function tidyHeading(text) {
     return String(text || '')
       .replace(/^for the\s+/i, '')
@@ -251,6 +278,7 @@
       Array.prototype.forEach.call(wprm, function (g) {
         var nameEl = g.querySelector('.wprm-recipe-ingredient-group-name, .wprm-recipe-group-name, h3, h4, h5');
         var group = nameEl ? tidyHeading(clean(nameEl.textContent)) : '';
+        if (!isSectionName(group)) group = '';
         Array.prototype.forEach.call(g.querySelectorAll('li'), function (li) {
           var t = clean(li.textContent);
           if (t) out.push({ text: t, group: group });
@@ -272,7 +300,7 @@
         var tag = el.tagName;
         if (/^H[2-6]$/.test(tag) || (tag === 'P' && el.children.length === 1 && el.children[0].tagName === 'STRONG')) {
           var h = clean(el.textContent);
-          if (h && h.length < 60) group = tidyHeading(h);
+          if (h && h.length < 60) group = isSectionName(h) ? tidyHeading(h) : '';
           continue;
         }
         if (tag === 'STRONG' && el.parentElement && el.parentElement.tagName === 'P' &&
@@ -467,6 +495,11 @@
     if (!total && (prep || cook)) total = (prep || 0) + (cook || 0);
 
     var img = absolutise(imageFrom(node.image), url);
+    if (!img) {
+      // Structured data often omits the photo even when the page has one.
+      var og = doc.querySelector('meta[property="og:image"], meta[name="twitter:image"]');
+      if (og) img = absolutise(og.getAttribute('content') || '', url);
+    }
     var title = clean(node.name) || clean((doc.querySelector('h1') || {}).textContent) || 'Untitled recipe';
     title = title.replace(/\s*[|–—-]\s*[^|–—-]{0,40}$/, function (m) {
       // trim trailing " | Site Name" style suffixes only when they look like branding

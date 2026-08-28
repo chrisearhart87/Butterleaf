@@ -163,36 +163,56 @@
     document.documentElement.style.setProperty('--sat', Math.max(top, 8) + 'px');
     document.documentElement.style.setProperty('--sab', Math.max(bottom, 8) + 'px');
   };
+  // The native side calls these from onPageFinished, which lands well before
+  // store.init() has resolved. Anything that touches the store waits its turn.
+  var whenReady = [];
+  BL.ready = false;
+  BL.onReady = function (fn) {
+    if (BL.ready) fn();
+    else whenReady.push(fn);
+  };
+  BL.markReady = function () {
+    BL.ready = true;
+    var q = whenReady.splice(0, whenReady.length);
+    q.forEach(function (fn) { try { fn(); } catch (e) {} });
+  };
+
   window.__setTheme = function (mode) {
     BL.systemTheme = mode;
     BL.applyTheme();
   };
   window.__goRoute = function (hash) {
-    if (hash) BL.go(hash);
+    if (hash) BL.onReady(function () { BL.go(hash); });
   };
   window.__syncFromNative = function () {
-    if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
-    if (BL.paintRingBar) BL.paintRingBar();
+    BL.onReady(function () {
+      if (BL.timers && BL.timers.reconcile) BL.timers.reconcile();
+      if (BL.paintRingBar) BL.paintRingBar();
+    });
   };
   window.__onSharedUrl = function (url) {
     BL.pendingSharedUrl = url;
-    BL.go('#/import');
+    BL.onReady(function () { BL.go('#/import'); });
   };
   window.__onImport = function (json) {
-    try {
-      var res = BL.store.importAll(json, 'merge');
-      BL.toast('Restored ' + res.added + ' recipes' + (res.updated ? ', updated ' + res.updated : ''));
-      BL.render();
-    } catch (e) {
-      BL.toast('That file could not be read');
-    }
+    BL.onReady(function () {
+      try {
+        var res = BL.store.importAll(json, 'merge');
+        BL.toast('Restored ' + res.added + ' recipes' + (res.updated ? ', updated ' + res.updated : ''));
+        BL.render();
+      } catch (e) {
+        BL.toast('That file could not be read');
+      }
+    });
   };
 
   /* ------------------------------------------------------- theme */
 
   BL.systemTheme = 'light';
   BL.applyTheme = function () {
-    var pref = BL.store.settings ? BL.store.settings().theme : 'auto';
+    // Called by the native side before the store has loaded, so read defensively.
+    var s = BL.store && BL.store.settings ? BL.store.settings() : null;
+    var pref = (s && s.theme) || 'auto';
     var mode = pref === 'auto' ? BL.systemTheme : pref;
     document.documentElement.setAttribute('data-theme', mode === 'dark' ? 'dark' : 'light');
   };
@@ -212,9 +232,18 @@
   /* ------------------------------------------------------- sheet */
 
   BL.sheet = function (html, onMount) {
-    var sheet = document.getElementById('sheet');
+    // Callers wire their buttons up with addEventListener on the sheet itself.
+    // Reusing the node meant every re-open stacked another live handler on it,
+    // so a Duplicate tap after four visits made four copies. Swap in a clean
+    // node the way render() does for #screen and the old listeners go with it.
+    var old = document.getElementById('sheet');
+    var sheet = old.cloneNode(false);
+    old.parentNode.replaceChild(sheet, old);
+
     var veil = document.getElementById('veil');
     sheet.innerHTML = '<div class="handle"></div><div class="sheet-body">' + html + '</div>';
+    // Let the fresh node lay out before the class lands, or the slide-up is skipped.
+    void sheet.offsetHeight;
     sheet.classList.add('on');
     veil.classList.add('on');
     BL.sheetOpen = true;
@@ -544,12 +573,16 @@
       BL.native.setSnoozeMinutes(BL.snoozeMin());
       BL.timers.init();
       window.addEventListener('hashchange', function () {
+        // Only the depth matters, and only to decide whether Back can go back.
+        // Left unbounded this grew for the life of the session.
         BL.stack.push(location.hash);
+        if (BL.stack.length > 50) BL.stack.splice(0, BL.stack.length - 50);
         BL.render();
       });
       if (!location.hash) location.replace('#/library');
       BL.render();
       document.body.classList.add('ready');
+      BL.markReady();
     }).catch(function (e) {
       document.getElementById('screen').innerHTML =
         '<div class="empty"><h3>Something went wrong</h3><p>' + BL.esc(String(e)) + '</p></div>';

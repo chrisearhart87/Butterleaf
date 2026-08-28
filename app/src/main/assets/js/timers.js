@@ -26,9 +26,13 @@
     { m: 240, label: 'Bulk ferment' }
   ];
 
+  // Starting several timers in quick succession used to fire one shade sync
+  // each; coalesce them so a burst crosses the bridge once.
+  var shadeSoon = null;
   function save() {
     BL.store.saveTimers(timers);
-    pushToShade();
+    if (shadeSoon) clearTimeout(shadeSoon);
+    shadeSoon = setTimeout(function () { shadeSoon = null; pushToShade(); }, 120);
   }
 
   /** Hands the live timers to Android so they show in the notification shade. */

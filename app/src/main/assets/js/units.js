@@ -399,9 +399,12 @@
     if (u.type === 'count') return null;
 
     if (u.type === 'vol') {
+      // Kitchen ladder, not a general-purpose one: measuring cups go down to a
+      // quarter cup, so stay in cups to there and only then drop to spoons.
+      // No quarts or gallons — nobody measures a bake in quarts, and "4 cups"
+      // beats "1 quart" at the bench every time.
       var ml = qty * u.ml;
-      if (ml >= 946) return { qty: ml / 946.353, unit: 'quart' };
-      if (ml >= 177) return { qty: ml / 236.588, unit: 'cup' };
+      if (ml >= 59) return { qty: ml / 236.588, unit: 'cup' };
       if (ml >= 14) return { qty: ml / 14.78676, unit: 'tbsp' };
       return { qty: ml / 4.92892, unit: 'tsp' };
     }
