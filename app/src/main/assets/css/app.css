@@ -248,7 +248,9 @@ html[data-theme='dark'] .seg button.on { background: var(--line); }
   background: rgba(252,251,249,.9); backdrop-filter: blur(6px);
   box-shadow: var(--shadow-sm);
 }
-.rcard .fav svg { width: 17px; height: 17px; color: var(--ink); }
+/* The pill is a light chip in both themes because it sits on a photo, so its
+   icon has to be dark in both too — var(--ink) went white-on-white in dark. */
+.rcard .fav svg { width: 17px; height: 17px; color: #14100D; }
 .rcard .fav.on svg { color: var(--accent); }
 .span-2 { grid-column: 1 / -1; }
 
